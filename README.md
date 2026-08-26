@@ -1,133 +1,170 @@
-# 🛡️ FiscalSentry: Autonomous Financial & Paperwork Action Engine
+# 🛡️ FiscalSentry: Autonomous Financial Defense & Paperwork Action Engine
 
-> **Google All Things Agentic Hackathon Submission**  
-> **Track:** *Taskmaster: Build a complete workflow, not just a chatbot.*  
-> *"Don't just make an agent that writes text. Make one that takes action."*
+> **Google All Things Agentic Hackathon 2026 Submission**  
+> **Primary Track:** 🏆 **The Taskmaster** — *Build a complete workflow, not just a chatbot. Don't just make an agent that writes text. Make one that takes action.*  
+> **Secondary Accreditations:** 🤝 **The Collaborative Partner** & 🏢 **The Fortified Enterprise Fleet**  
+> **Live Demo:** [https://fiscalsentry-void.web.app](https://fiscalsentry-void.web.app)  
+> **GitHub Repository:** [https://github.com/ompatel3158/Fiscalsentry.git](https://github.com/ompatel3158/Fiscalsentry.git)
 
 ---
 
-## 🌟 Executive Overview
+## 🌟 Executive Summary
 
-**FiscalSentry** is an autonomous 24/7 background agent and multimodal intelligence workstation designed to eliminate chaotic financial paperwork and bureaucratic friction.
+Most AI assistants wait passively for prompts and generate conversational text. **FiscalSentry is an autonomous, event-driven action agent that works in the background while you do other things.**
 
-Instead of requiring manual scrutiny of medical bills, insurance EOBs, vendor proposals, and government subsidy forms, **FiscalSentry continuously monitors inboxes and channels, audits every line-item against federal regulations and fair-pricing benchmarks using Gemini 2.0 Multimodal AI, and autonomously executes real-world actions across Google Workspace (Calendar, Tasks, Sheets, Drive, Gmail), Slack, Discord, and generates signature-ready legal PDFs.**
+FiscalSentry solves one of the most frustrating, multi-step chores in personal and enterprise finance: **bureaucratic paperwork, erroneous medical bills, deceptive vendor quotes, unallocated IPO mandate holds, and multi-currency billing violations.**
+
+It continuously monitors incoming emails and webhooks 24/7, extracts line-item charges using **Gemini 3.5 Flash & Gemini 3.1 Flash Lite**, filters out promotional marketing noise, reconciles temporary liens (e.g., IPO application blocks/releases), audits charges against federal statutes (No Surprises Act, CMS NCCI, IRA Section 48), and **autonomously executes multi-step real-world actions across Google Workspace (Calendar, Tasks, Sheets, Drive, Gmail), Slack, Discord, and generates signature-ready legal dispute PDFs.**
+
+---
+
+## 🏗️ System Architecture
 
 ```mermaid
 graph TD
-    subgraph Ingestion["1. Multi-Source Ingestion & Media Upload"]
-        A["📬 Gmail Sentry (24/7 Hourly Poller)"] --> E["Triage & Attachment Extractor"]
-        B["💬 Slack / Discord Feed Watcher"] --> E
-        C["🔗 Inbound ERP & Accounting Webhooks"] --> E
-        D["📂 Multimodal Dropzone (PDFs, Images, Audio, Spreadsheets)"] --> E
+    subgraph SentryIngress["1. 24/7 Autonomous Ingestion Layer"]
+        A["📬 Gmail Sentry (Hourly Poller + Event Trigger)"] --> Filter["🛡️ Anti-Promotional & Spam Filter"]
+        B["💬 Slack / Discord Webhook Feed"] --> Filter
+        C["🔗 Inbound ERP / Accounting Webhook"] --> Filter
+        D["📂 Multimodal Dropzone (PDF, Image, Spreadsheet, Audio)"] --> Filter
     end
 
-    subgraph FirebaseBackend["2. Firebase Infrastructure"]
-        E --> F["Firebase Storage (Files & Media)"]
-        F --> G["Cloud Firestore (Sessions, RAG Chunks, Audits, Logs)"]
+    subgraph GoogleCloudInfra["2. Google Cloud & Firebase Infrastructure"]
+        Filter --> FS["🔥 Cloud Firestore (Audits, RAG Chunks, Chat Sessions)"]
+        Filter --> ST["🗄️ Firebase Cloud Storage (Encrypted Document Blobs)"]
+        Filter --> AUTH["🔑 Firebase Auth (Google OAuth 2.0 with Zero-Trust Scopes)"]
     end
 
-    subgraph AgentBrain["3. Gemini Multimodal Agent & RAG Core"]
-        G --> H["RAG Memory Retriever (Past Invoices, Statutes, Decisions)"]
-        H --> I["Gemini Multimodal Reasoning Engine"]
-        I --> J["Chat Response & Multi-Step Action Synthesizer"]
+    subgraph GeminiAgentCore["3. Gemini Multimodal Agent & RAG Brain"]
+        FS --> RAG["🧠 Dynamic RAG Statutory Memory Bank"]
+        RAG --> GEMINI["⚡ Gemini 3.5 Flash / 3.1 Flash Lite Multimodal Engine"]
+        GEMINI --> RECON["⚖️ Multi-Currency & Smart Lien Reconciler (₹, $, €, £)"]
+        RECON --> DAG["📊 Multi-Destination Execution DAG Generator"]
     end
 
-    subgraph ActionExecution["4. Multi-Destination Execution Layer"]
-        J --> K["🗓️ Google Calendar & ✅ Google Tasks"]
-        J --> L["📊 Google Sheets & 🗂️ Google Drive"]
-        J --> M["✉️ Gmail & 💬 Slack / Discord"]
-        J --> N["📄 Official PDF Engine (Dispute Letters / POs)"]
-        J --> O["🔗 3rd-Party Webhooks (QuickBooks, Zapier)"]
+    subgraph ActionDispatcher["4. Autonomous Action Execution Layer"]
+        DAG --> CAL["🗓️ Google Calendar (30-Day Statutory Appeal Deadlines)"]
+        DAG --> TSK["✅ Google Tasks (Prioritized Action Cards & Call Scripts)"]
+        DAG --> SHT["📊 Google Sheets (Live Recovery & Spend Tracker)"]
+        DAG --> DRV["🗂️ Google Drive (Evidence Dossier Archive)"]
+        DAG --> GML["✉️ Gmail (Pre-Drafted Dispute Letters)"]
+        DAG --> SLK["💬 Slack & Discord (Interactive Webhook Cards)"]
+        DAG --> PDF["📄 PDF Engine (Signature-Ready Legal Dispute Letters & POs)"]
     end
 
-    Ingestion --> FirebaseBackend
-    FirebaseBackend --> AgentBrain
-    AgentBrain --> ActionExecution
+    SentryIngress --> GoogleCloudInfra
+    GoogleCloudInfra --> GeminiAgentCore
+    GeminiAgentCore --> ActionDispatcher
 ```
 
 ---
 
-## 💎 Key Capabilities & Innovations
+## 🏆 How FiscalSentry Wins "The Taskmaster" Track
 
-### 1. 24/7 Autonomous Inbox Sentry
-* Connects to Google Workspace to continuously monitor incoming emails for bills, invoices, vendor quotes, and grant notifications.
-* Automatically downloads attachments, triages urgent statutory deadlines, and stages audits in the live pipeline.
+The Taskmaster track challenges builders to create an **event-driven workflow with autonomous routing** that watches for a change, determines what needs to happen next, and interacts across multiple applications from start to finish without requiring hand-holding.
 
-### 2. Deep Multimodal Line-Item Auditing
-* **Medical Billing:** Extracts CPT/ICD-10 codes, flags unbundled procedures under CMS NCCI guidelines, detects duplicate charges, and challenges out-of-network balance billing under the **No Surprises Act (Public Law 116-260)**.
-* **Vendor Quotes & Procurement:** Normalizes unstructured multi-vendor PDFs into a standardized line-item matrix, identifies price discrepancies, and calculates negotiation leverage.
-* **Clean Energy Grants & Subsidies:** Audits utility statements and capital expenses against Section 48 Investment Tax Credits (IRA) and state rebate programs.
-
-### 3. Multi-Destination Real-World Action Dispatch
-* 🗓️ **Google Calendar:** Auto-schedules statutory 30-day appeal deadlines, grant submission cutoffs, and delivery milestones.
-* ✅ **Google Tasks:** Creates prioritized action items with call battlecards and scripts.
-* 📊 **Google Sheets:** Synchronizes real-time financial recoveries and comparison matrices.
-* 🗂️ **Google Drive:** Organizes evidence dossier folders and archives audit reports.
-* ✉️ **Gmail:** Pre-drafts ready-to-send dispute letters and negotiation counter-offers.
-* 💬 **Slack & Discord:** Dispatches interactive cards with 1-click approval buttons.
-* 📄 **PDF Engine:** Generates official signature-ready legal dispute letters and purchase orders (`jspdf` / `pdf-lib`).
-
-### 4. Interactive AI Workstation with RAG Chain Memory & Multi-Chat
-* **Multi-Chat Management:** Create, switch, inline rename, pin, and delete conversation threads.
-* **RAG Context Memory:** Semantic indexing of past invoices, dispute letters, and statutory regulations automatically retrieved and injected into conversation context.
-* **Universal Media Upload:** Attach any file type (PDFs, photos, voice notes, spreadsheets) directly into chat.
-
-### 5. Apple-Grade Design Engineering
-* Crafted following **Emil Kowalski's Design Engineering & Apple Design Principles** (`skills/apple-design` & `skills/emil-design-eng`).
-* Critically damped spring animations (`motion`), tactile `:active` press feedback (`scale(0.97)`), entrance scaling from `scale(0.96)`, shared layout tab animations, **Sonner** toast stack, and meticulous Light & Dark mode.
+| Taskmaster Requirement | How FiscalSentry Implements It |
+|---|---|
+| **Event-Driven Workflow** | Automated hourly background worker polls Gmail and monitors inbound webhooks for bills, bank alerts, and receipts without requiring manual user triggers. |
+| **Autonomous Routing** | Classifies incoming documents into categories (`medical_bill`, `vendor_quotes`, `grant_subsidy`, `invoice_receipt`, `hold_lien`, `unblocked_lien`), extracts amounts/currencies, and builds execution dependency DAGs. |
+| **Multi-App Real Action** | Dispatches synchronized actions to **Google Calendar**, **Google Tasks**, **Google Sheets**, **Google Drive**, **Gmail**, **Slack**, and **Discord** in parallel. |
+| **Heavy Lifting & Reasoning** | Audits CPT/ICD-10 codes, cross-references Medicare allowable fees (MPFS 2026), enforces No Surprises Act balance billing caps, normalizes multi-vendor quotes, and calculates Section 48 ITC clean energy tax credits. |
+| **Zero Prompt Noise** | Strips promotional/coupon emails with high-precision regex & LLM classification, ensuring only genuine transactions enter the ledger. |
 
 ---
 
-## 🚀 Quick Start Guide
+## 💎 Core Innovation Highlights
+
+### 1. 24/7 Autonomous Inbox Sentry & Smart Reconciliation
+* **Zero Configuration Needed:** Once connected, the autonomous poller checks Gmail every 1 hour (3,600s) and runs a catch-up check on startup.
+* **IPO Lien & Hold Reconciliation:** Recognizes temporary capital blocks (e.g. ₹15,000 IPO application mandate) and automatic unblocks/revocations, adjusting actual net spend to **0.00** so cash balance remains 100% accurate.
+* **Anti-Promotional Shield:** Automatically filters out marketing solicitations, coupons, and newsletters (e.g. "Costco Promotional Offers", "Flash Sales") before they pollute the financial liabilities ledger.
+
+### 2. Multi-Currency Autonomous Ledger
+* Supports full dynamic formatting and parsing for global currencies: **Indian Rupee (₹ INR)** with Indian numbering format, **US Dollar ($ USD)**, **Euro (€ EUR)**, **British Pound (£ GBP)**, and more.
+* Provides **Multi-Currency Portfolio Cards** and real-time **Currency Switcher Filter Pills** in both the Command Center and Financial Year tabs.
+
+### 3. Dynamic RAG Statutory Memory Bank
+* Eliminates hardcoded or static citation fallbacks.
+* Dynamically indexes user audited documents and matches statutory laws (`45 CFR § 149.410`, `CMS NCCI Chapter 1`, `IRA Section 48`) with relevance thresholds.
+* Citations appear **only when genuinely relevant**, providing clickable proof behind every disputed dollar.
+
+### 4. 1-Click Multi-Action Dispatch Queue
+* **Google Calendar:** Inserts statutory 30-day appeal deadlines with alert reminders.
+* **Google Tasks:** Stages checklist items with telephone negotiation battlecards.
+* **Google Sheets:** Appends row-level recovery records to your tax ledger.
+* **Google Drive:** Generates dedicated case folders with raw evidence.
+* **Signature-Ready PDF Generator:** Client-side vector PDF generation (`jspdf`) creates ready-to-file legal dispute letters, medical appeals, and purchase orders.
+
+---
+
+## 🛠️ Google Technologies & Stack
+
+* **AI & Agent Core:** 
+  * Google Gemini 3.5 Flash / Gemini 3.1 Flash Lite / Gemini 3.6 Flash via `@google/generative-ai` & `@google/genai`
+  * Antigravity Agent Runtime & Memory Framework
+* **Google Cloud Infrastructure:**
+  * **Firebase Hosting:** Global CDN Edge Deployment ([fiscalsentry-void.web.app](https://fiscalsentry-void.web.app))
+  * **Cloud Firestore:** Zero-Trust NoSQL database for audited statements, chat sessions, and RAG knowledge
+  * **Firebase Storage:** Cloud blob storage for uploaded PDFs and image receipts
+  * **Firebase Authentication:** Google OAuth 2.0 with selective workspace scopes (`gmail.readonly`, `calendar.events`, `tasks`, `drive.file`)
+* **Frontend & UX:**
+  * Next.js 14 (App Router, TypeScript, React Server/Client Components)
+  * Tailwind CSS & Lucide Icons with Light/Dark Theme Engine
+  * `framer-motion` for spring physics, micro-interactions, and responsive drawers
+  * `sonner` for actionable toast queues & `canvas-confetti` for recovery celebration
+
+---
+
+## 🚀 Quick Start & Local Setup
 
 ### Prerequisites
 * Node.js 18+ or 20+
 * npm or yarn
+* A Google AI Studio API key ([aistudio.google.com](https://aistudio.google.com))
 
 ### Installation
 ```bash
-# 1. Clone or navigate to the project directory
-cd b:/work/Taskmaster
+# 1. Clone the repository
+git clone https://github.com/ompatel3158/Fiscalsentry.git
+cd Fiscalsentry
 
 # 2. Install dependencies
 npm install
 
-# 3. (Optional) Configure environment variables
+# 3. Configure environment variables
 cp .env.example .env.local
+# Add your NEXT_PUBLIC_GEMINI_API_KEY and Firebase project settings
 
-# 4. Start development server
+# 4. Start local development server
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-> [!NOTE]
-> **Zero-Config Hackathon Mode:** If no API keys are provided in `.env.local`, FiscalSentry runs seamlessly in calibrated mock demo mode with 3 pre-loaded real-world scenarios for instant judging.
+> [!TIP]
+> **Instant Judge Mode:** If no Google Workspace account is linked, click **`⚡ Load Temporary Demo Data`** in the Command Center to instantly test real-world scenarios (Metro Health $1,840 Medical Dispute, TechCorp $3,200 Hardware PO, and Section 48 Clean Energy Grant).
 
 ---
 
-## ⚡ 1-Click Judging Demos
+## 🎬 1-Click Judging Walkthrough Demo
 
-Use the quick preset selector in the top bar to test the 3 core workflows:
-1. 🏥 **Metro Health Medical Bill:** Ingest hospital bill $\rightarrow$ verify CPT 99214 unbundling & NSA Sec. 102 balance billing flags $\rightarrow$ generate formal dispute PDF $\rightarrow$ sync to Google Calendar.
-2. 💼 **3-Vendor Quote Matrix:** Compare Apex, Vertex, and Nexus proposals $\rightarrow$ verify $3,200 hardware savings $\rightarrow$ generate official Purchase Order PDF.
-3. 🌿 **Clean Energy Grant:** Calculate Section 48 ITC tax credit ($4,500 rebate) $\rightarrow$ archive to Google Drive.
-
----
-
-## 🛠️ Technology Stack
-
-| Layer | Technologies |
-|---|---|
-| **Framework & Fullstack** | Next.js 14 (App Router, TypeScript, Server & Client Components) |
-| **Styling & Design System** | Tailwind CSS, Lucide Icons, Glassmorphism, CSS Variables |
-| **Motion & Physics** | `framer-motion` / `motion` (Spring physics, Shared layout animations) |
-| **Feedback & Notifications** | `sonner` (Actionable toasts), `canvas-confetti` |
-| **AI & Multimodal Core** | Official `@google/genai` & `@google/generative-ai` (Gemini 2.0 Flash / Pro) |
-| **Backend & Storage** | Firebase (Cloud Firestore, Firebase Storage, Firebase Auth) |
-| **Document Generation** | `jspdf` & `pdf-lib` (Signature-ready legal & business PDF creation) |
+1. **Autonomous Command Center:**
+   * View live KPI cards (Original Billed, Benchmark, Disputed Overcharges, Subscriptions).
+   * Click on any Month (e.g. *August 2026*) in the sidebar to open the full in-canvas **Month Overview Canvas** with itemized transactions and 1-click CSV export.
+2. **Financial Year & Date Customization:**
+   * Navigate to the **Financial Year** tab.
+   * Switch between **FY 2026**, **Last 30 Days**, or **Custom Range** date pickers.
+   * Test the **Multi-Currency Switcher** (`[ All ]`, `[ ₹ INR ]`, `[ $ USD ]`).
+3. **Execute Real Actions:**
+   * Select a document (e.g., *Metro General Hospital*).
+   * Click **Execute All** or individual action items to stage calendar reminders, task checklists, and preview the signature-ready dispute PDF.
+4. **AI Reasoning Chat & Dynamic RAG:**
+   * Switch to the **AI Chat** tab.
+   * Ask: *"Audit my recent Swiggy debits and tell me if there are duplicate charges"* or *"Explain the No Surprises Act balance billing violation on my hospital bill"*.
+   * Verify dynamic model indicators, markdown tables, 1-click copy buttons, and solid black user bubble styling.
 
 ---
 
-## 📜 License
-MIT License • Built with pride for Google All Things Agentic Hackathon 2026.
+## 📄 License
+MIT License • Built with pride for the **Google All Things Agentic Hackathon 2026**.
