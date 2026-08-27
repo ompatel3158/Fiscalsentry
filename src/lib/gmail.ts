@@ -24,6 +24,13 @@ export interface ExtractedEmail {
   bodyText: string;
   attachments: GmailAttachment[];
   isLikelyFinancialTransaction?: boolean;
+  parsedBankHint?: {
+    amount?: number;
+    currency?: string;
+    currencySymbol?: string;
+    transactionType?: 'expense' | 'hold_lien' | 'unblocked_lien' | 'refund' | 'transfer' | 'subscription';
+    merchant?: string;
+  } | null;
 }
 
 /**
@@ -189,9 +196,9 @@ export async function fetchFinancialEmailsFromGmail(
     throw new Error('Google OAuth access token is required to fetch Gmail data.');
   }
 
-  // 1. High-precision financial query excluding promotions and social spam
+  // 1. Broad query capturing ALL emails in Primary, Updates, and Notifications (Excluding ONLY promotions, social, and spam)
   const query = encodeURIComponent(
-    `(payment OR debit OR debited OR credit OR credited OR UPI OR NEFT OR IMPS OR transfer OR statement OR bill OR invoice OR receipt OR subscription OR "transaction alert" OR "order confirmed" OR "funds blocked" OR "mandate") -category:promotions -category:social -is:draft -is:spam newer_than:${daysLookback}d`
+    `-category:promotions -category:social -is:draft -is:spam newer_than:${daysLookback}d`
   );
   const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=${maxResults}`;
 
@@ -211,14 +218,14 @@ export async function fetchFinancialEmailsFromGmail(
     }
   } catch (_) {}
 
-  // Fallback: If strict query returned 0, try broader inbox query excluding promotions
+  // Fallback: If newer_than returned 0, fetch latest inbox & updates messages without date restriction
   if (messages.length === 0) {
     try {
       const fallbackQuery = encodeURIComponent(
-        `-category:promotions -category:social -is:draft -is:spam newer_than:${daysLookback}d`
+        `-category:promotions -category:social -is:draft -is:spam`
       );
       const fallbackListRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${fallbackQuery}&maxResults=25`,
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${fallbackQuery}&maxResults=${maxResults}`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -373,6 +380,8 @@ export async function fetchFinancialEmailsFromGmail(
         } catch (_) {}
       }
 
+      const parsedBankHint = extractBankTransactionFromText(`${subject} ${snippet} ${bodyText}`);
+
       return {
         id: msg.id,
         threadId: msg.threadId,
@@ -383,6 +392,7 @@ export async function fetchFinancialEmailsFromGmail(
         snippet,
         bodyText,
         attachments,
+        parsedBankHint,
         isLikelyFinancialTransaction: true,
       } as ExtractedEmail;
     } catch {

@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AuditResult, ChatMessage, RAGSourceCitation } from './types';
 import { MOCK_AUDITS } from './mock-data';
+import { ExtractedEmail } from './gmail';
 
 export type SupportedModel = 'gemini-3.1-flash-lite' | 'gemini-3.5-flash-lite' | 'gemini-3.6-flash' | 'gemini-2.0-flash' | 'gemini-2.0-pro';
 
@@ -186,6 +187,210 @@ Output pure, valid JSON adhering to this TypeScript structure:
     }
 
     return MOCK_AUDITS['medical-metro-health'];
+  }
+}
+
+/**
+ * Single-Call Batch Auditor:
+ * Evaluates an entire hourly batch of emails in ONE SINGLE GEMINI API CALL.
+ * Discards marketing/promotions, extracts real financial debits/credits/bills/IPO holds,
+ * and consolidates the batch into at most 1 high-precision Hourly Audit Entry.
+ */
+export async function auditBatchFinancialEmails(
+  emails: ExtractedEmail[],
+  preferredModel: string = 'gemini-3.1-flash-lite'
+): Promise<AuditResult | null> {
+  if (!emails || emails.length === 0) return null;
+
+  const apiKey = getApiKey();
+
+  // If Gemini is not configured, fall back to deterministic regex parser
+  if (!isGeminiConfigured()) {
+    console.log('[Gemini] API key not found; processing batch with deterministic regex parser');
+    const validItems: { email: ExtractedEmail; bank: NonNullable<ExtractedEmail['parsedBankHint']> }[] = [];
+    emails.forEach((e) => {
+      if (e.parsedBankHint && e.parsedBankHint.amount && e.parsedBankHint.amount > 0) {
+        validItems.push({ email: e, bank: e.parsedBankHint });
+      }
+    });
+
+    if (validItems.length === 0) return null;
+
+    const totalBilled = validItems.reduce((sum, v) => sum + (v.bank.amount || 0), 0);
+    const primaryCurrency = validItems[0].bank.currency || 'USD';
+    const primarySymbol = validItems[0].bank.currencySymbol || '$';
+    const vendors = Array.from(new Set(validItems.map((v) => v.bank.merchant || v.email.sender).filter(Boolean))).join(', ');
+
+    return {
+      id: 'audit-batch-' + Math.random().toString(36).substring(2, 9),
+      title: `Hourly Sentry Digest: ${validItems.length} Transactions Audited`,
+      category: 'invoice_receipt',
+      providerOrVendor: vendors.length > 30 ? vendors.substring(0, 30) + '...' : vendors || 'Multi-Vendor',
+      documentDate: new Date().toISOString().split('T')[0],
+      totalBilledAmount: totalBilled,
+      fairBenchmarkAmount: totalBilled,
+      potentialRecoveryAmount: 0,
+      currency: primaryCurrency,
+      currencySymbol: primarySymbol,
+      transactionType: 'expense',
+      actualNetSpend: totalBilled,
+      riskLevel: 'low',
+      summary: `Automated hourly Sentry batch audit captured ${validItems.length} transactions totaling ${primarySymbol}${totalBilled.toFixed(2)}.`,
+      citations: [],
+      lineItems: validItems.map((v, i) => ({
+        id: `li-${i + 1}`,
+        code: `TXN-${i + 1}`,
+        description: `${v.bank.merchant || v.email.sender}: ${v.email.subject}`,
+        originalAmount: v.bank.amount || 0,
+        benchmarkAmount: v.bank.amount || 0,
+        deltaSavings: 0,
+        status: 'compliant' as const,
+        confidenceScore: 0.95,
+        reasoning: 'Verified transactional record',
+      })),
+      actions: [
+        {
+          id: 'act-batch-sheet-1',
+          type: 'google_sheets',
+          title: `Append ${validItems.length} Transactions to Google Sheets`,
+          description: 'Synchronize hourly batch audit records to your Financial Ledger',
+          targetService: 'Google Sheets',
+          status: 'pending',
+          priority: 'medium',
+          deadlineDate: new Date().toISOString().split('T')[0],
+          estimatedRecoveryAmount: 0,
+          payload: { sheetName: 'Transactions', count: validItems.length },
+        },
+      ],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  const modelToUse = resolveModelName(preferredModel);
+  const genAI = new GoogleGenerativeAI(apiKey);
+
+  const batchContent = emails
+    .map(
+      (e, idx) => `
+[EMAIL #${idx + 1}]
+ID: ${e.id}
+Subject: ${e.subject}
+From: ${e.sender} (${e.senderEmail})
+Date: ${e.date}
+Snippet: ${e.snippet}
+Body Preview:
+${e.bodyText.substring(0, 1000)}
+${e.parsedBankHint ? `Detected Bank Pattern: Amount=${e.parsedBankHint.amount}, Currency=${e.parsedBankHint.currency}, Type=${e.parsedBankHint.transactionType}, Merchant=${e.parsedBankHint.merchant}` : ''}
+---`
+    )
+    .join('\n');
+
+  const prompt = `
+You are FiscalSentry, an autonomous financial intelligence & paperwork defense auditor powered by Google Gemini.
+You are evaluating an hourly batch of ${emails.length} candidate emails pulled from the user's Gmail (Inbox and Updates).
+
+OBJECTIVES:
+1. DISCRIMINATE & FILTER:
+   - Identify which emails are REAL financial transactions (bank debits, credits, UPI payments, subscription renewals, bills, invoices, order receipts, IPO application mandates/holds, or lien unblocks/refunds).
+   - Filter out all promotional marketing campaigns, discount offers, coupons, sales announcements, and newsletters (they have $0 debt and 0 liability).
+
+2. BATCH RECONCILIATION:
+   - If ZERO real financial transactions exist in this batch (all are promotional or non-financial), output JSON:
+     { "hasFinancialTransactions": false }
+
+   - If ONE OR MORE real financial transactions exist:
+     Consolidate them into ONE high-precision hourly audit statement JSON representing this batch:
+     {
+       "hasFinancialTransactions": true,
+       "title": string,
+       "category": "invoice_receipt" | "medical_bill" | "vendor_quotes" | "grant_subsidy",
+       "providerOrVendor": string,
+       "accountNumber": string,
+       "documentDate": "YYYY-MM-DD",
+       "totalBilledAmount": number,
+       "fairBenchmarkAmount": number,
+       "potentialRecoveryAmount": number,
+       "currency": string,
+       "currencySymbol": string,
+       "transactionType": "expense" | "refund" | "hold_lien" | "unblocked_lien" | "subscription" | "transfer" | "bill",
+       "actualNetSpend": number,
+       "isRecurringSubscription": boolean,
+       "riskLevel": "critical" | "high" | "medium" | "low",
+       "summary": string,
+       "citations": [{"statute": string, "title": string, "applicableSection": string, "summary": string}],
+       "lineItems": [{
+         "id": string,
+         "code": string,
+         "description": string,
+         "originalAmount": number,
+         "benchmarkAmount": number,
+         "deltaSavings": number,
+         "status": "compliant" | "overcharge" | "unbundled" | "duplicate" | "statutory_violation" | "negotiable" | "rebate_eligible",
+         "violationType": string,
+         "confidenceScore": number,
+         "reasoning": string
+       }],
+       "actions": [{
+         "id": string,
+         "type": "google_calendar" | "google_tasks" | "google_sheets" | "google_drive" | "gmail" | "slack" | "discord" | "pdf_dispute" | "pdf_po",
+         "title": string,
+         "description": string,
+         "targetService": string,
+         "status": "pending",
+         "priority": "urgent" | "high" | "medium" | "low",
+         "deadlineDate": "YYYY-MM-DD",
+         "estimatedRecoveryAmount": number,
+         "payload": {}
+       }]
+     }
+
+Output pure, valid JSON only.
+`;
+
+  try {
+    const model = genAI.getGenerativeModel({ model: modelToUse });
+    const result = await model.generateContent([
+      { text: prompt },
+      { text: `BATCH DATA:\n${batchContent}` },
+    ]);
+    const parsed = parseJsonFromLlm(result.response.text());
+
+    if (parsed.hasFinancialTransactions === false || (!parsed.lineItems || parsed.lineItems.length === 0)) {
+      console.log('[Gemini Batch Audit] No genuine financial transactions in this batch; promotional emails discarded.');
+      return null;
+    }
+
+    return {
+      id: 'audit-batch-' + Math.random().toString(36).substring(2, 9),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...parsed,
+    };
+  } catch (err: any) {
+    console.error(`[Gemini Batch ${modelToUse}] Error:`, err);
+    if (modelToUse !== 'gemini-3.6-flash') {
+      try {
+        const fallbackModel = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
+        const fbResult = await fallbackModel.generateContent([
+          { text: prompt },
+          { text: `BATCH DATA:\n${batchContent}` },
+        ]);
+        const fbParsed = parseJsonFromLlm(fbResult.response.text());
+        if (fbParsed.hasFinancialTransactions === false || (!fbParsed.lineItems || fbParsed.lineItems.length === 0)) {
+          return null;
+        }
+        return {
+          id: 'audit-batch-' + Math.random().toString(36).substring(2, 9),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          ...fbParsed,
+        };
+      } catch (fbErr) {
+        console.error('[Gemini Batch Fallback] Error:', fbErr);
+      }
+    }
+    return null;
   }
 }
 

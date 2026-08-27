@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchFinancialEmailsFromGmail } from '@/lib/gmail';
-import { auditFinancialDocument } from '@/lib/gemini';
+import { auditBatchFinancialEmails } from '@/lib/gemini';
 import { indexNewDocument } from '@/lib/rag';
-import { MOCK_AUDITS } from '@/lib/mock-data';
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -32,95 +31,68 @@ async function handlePoll(
 ) {
   const timestamp = new Date().toISOString();
 
-  // 1. If real Google OAuth Access Token is provided, fetch REAL Gmail inbox data!
+  // 1. If real Google OAuth Access Token is provided, fetch REAL Gmail inbox data in 1 batch!
   if (accessToken && !forceSimulation) {
     try {
-      console.log('[Sentry Poll] Querying live Gmail API for financial emails...');
-      const realEmails = await fetchFinancialEmailsFromGmail(accessToken, 8);
+      console.log('[Sentry Serverless Poll] Querying live Gmail API for candidate emails across Inbox & Updates...');
+      const realEmails = await fetchFinancialEmailsFromGmail(accessToken, 25, 2);
 
       if (realEmails.length > 0) {
-        // Take the most relevant or recent email
-        const targetEmail = realEmails[0];
-        console.log(`[Sentry Poll] Found real email: "${targetEmail.subject}" from ${targetEmail.sender}`);
+        console.log(`[Sentry Serverless Poll] Executing 1-shot batch Gemini audit for ${realEmails.length} emails...`);
+        const batchAudit = await auditBatchFinancialEmails(realEmails, preferredModel);
 
-        // Run Gemini 3.1 Flash Lite multimodal audit on the real email
-        const docText = `
-Subject: ${targetEmail.subject}
-From: ${targetEmail.sender}
-Date: ${targetEmail.date}
-Snippet: ${targetEmail.snippet}
-Content:
-${targetEmail.bodyText.substring(0, 4000)}
-`;
+        if (batchAudit) {
+          // Index consolidated record in RAG memory
+          indexNewDocument(
+            `Hourly Sentry Batch: ${batchAudit.title}`,
+            `${batchAudit.summary}\nProvider: ${batchAudit.providerOrVendor}\nTotal Billed: ${batchAudit.currencySymbol || '$'}${batchAudit.totalBilledAmount}`,
+            'past_invoice'
+          );
 
-        const attachment = targetEmail.attachments[0];
-        const realAudit = await auditFinancialDocument(
-          docText,
-          attachment?.dataBase64,
-          attachment?.mimeType || 'application/pdf',
-          preferredModel
-        );
-
-        // Customize title with real sender/subject if generic
-        if (!realAudit.title || realAudit.title.includes('Statement')) {
-          realAudit.title = targetEmail.subject.length > 40 ? targetEmail.subject.substring(0, 40) + '...' : targetEmail.subject;
+          return NextResponse.json({
+            success: true,
+            isRealData: true,
+            polledAt: timestamp,
+            eventDetected: true,
+            totalEmailsEvaluated: realEmails.length,
+            batchAudit,
+            status: 'ACTIVE_MONITORING',
+          });
         }
-        if (!realAudit.providerOrVendor) {
-          realAudit.providerOrVendor = targetEmail.sender.replace(/<.*?>/g, '').trim();
-        }
-
-        // Index in RAG memory
-        indexNewDocument(
-          `Real Gmail: ${targetEmail.subject}`,
-          `${realAudit.summary}\nSender: ${targetEmail.sender}\nPotential Recovery: $${realAudit.potentialRecoveryAmount}`,
-          'past_invoice'
-        );
-
-        return NextResponse.json({
-          success: true,
-          isRealData: true,
-          polledAt: timestamp,
-          eventDetected: true,
-          totalEmailsChecked: realEmails.length,
-          event: {
-            source: 'gmail',
-            sender: targetEmail.sender,
-            subject: targetEmail.subject,
-            attachmentName: attachment?.filename || 'Extracted_Email_Body.txt',
-            audit: realAudit,
-          },
-          status: 'ACTIVE_MONITORING',
-        });
-      } else {
-        return NextResponse.json({
-          success: true,
-          isRealData: true,
-          polledAt: timestamp,
-          eventDetected: false,
-          message: 'Gmail inbox scanned. No new unread financial invoices or billing attachments found.',
-          status: 'ACTIVE_MONITORING',
-        });
       }
-    } catch (err: any) {
-      console.error('[Sentry Poll] Gmail API fetch error:', err);
+
       return NextResponse.json({
-        success: false,
-        isRealData: false,
-        error: err.message,
-        message: 'Gmail authentication expired or permissions missing. Please re-connect Google Workspace.',
-        requiresGoogleAuth: true,
-      }, { status: 401 });
+        success: true,
+        isRealData: true,
+        polledAt: timestamp,
+        eventDetected: false,
+        totalEmailsEvaluated: realEmails.length,
+        message: 'Gmail inbox and updates scanned. Zero financial liabilities found (promotional offers discarded).',
+        status: 'ACTIVE_MONITORING',
+      });
+    } catch (err: any) {
+      console.error('[Sentry Poll] Gmail API error:', err);
+      return NextResponse.json(
+        {
+          success: false,
+          isRealData: false,
+          error: err.message,
+          message: 'Gmail authentication expired or permissions missing. Please re-connect Google Workspace.',
+          requiresGoogleAuth: true,
+        },
+        { status: 401 }
+      );
     }
   }
 
-  // 2. If no OAuth token, return simulation or prompt to connect
+  // 2. Standby response if no active token is passed
   return NextResponse.json({
     success: true,
     isRealData: false,
     polledAt: timestamp,
     eventDetected: false,
     requiresGoogleAuth: true,
-    message: 'Google Workspace not connected. Connect Google in Settings or Integrations to pull real emails.',
+    message: 'Google Workspace not connected. Connect Google Workspace in Settings to poll real emails.',
     status: 'STANDBY',
   });
 }

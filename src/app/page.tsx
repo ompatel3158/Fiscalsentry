@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { formatCurrency } from '@/lib/types';
 import { Navbar } from '@/components/Navbar';
+import { WelcomeHero } from '@/components/landing/WelcomeHero';
 import { DropZone } from '@/components/dashboard/DropZone';
 import { AuditInspector } from '@/components/dashboard/AuditInspector';
 import { ActionDrawer } from '@/components/dashboard/ActionDrawer';
@@ -30,12 +31,15 @@ import {
   Trash2,
   Scale,
   Zap,
+  LayoutDashboard,
+  ArrowLeft,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Home() {
   const {
     currentView,
+    setCurrentView,
     allAudits,
     activeAudit,
     setActiveAudit,
@@ -50,7 +54,7 @@ export default function Home() {
 
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
-  const totalRecovery = allAudits.reduce((acc, a) => acc + a.potentialRecoveryAmount, 0);
+  const totalRecovery = allAudits.reduce((acc, a) => acc + (a.potentialRecoveryAmount || 0), 0);
 
   const primarySymbol = useMemo(() => {
     if (allAudits.length === 0) return '$';
@@ -69,7 +73,10 @@ export default function Home() {
 
       {/* 2. Main Workstation Area */}
       <div className="flex-1 flex overflow-hidden relative">
-        {currentView === 'dashboard' ? (
+        {currentView === 'welcome' ? (
+          /* Welcome Landing Page for first-time visitors & tour */
+          <WelcomeHero />
+        ) : currentView === 'dashboard' ? (
           <div className="flex-1 flex w-full h-full overflow-hidden relative">
             {/* Desktop Left Feed Pane (320px) */}
             <aside className="hidden lg:flex w-80 h-full border-r border-black/[0.06] dark:border-white/[0.08] bg-white/60 dark:bg-[#09090b]/60 backdrop-blur-2xl flex-col shrink-0">
@@ -119,16 +126,22 @@ export default function Home() {
               </div>
 
               {/* Feed Header */}
-              <div className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#86868b] flex items-center justify-between">
+              <div className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#86868b] flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.04]">
                 <span>Audited Statements ({allAudits.length})</span>
-                {allAudits.length === 0 && (
-                  <button
-                    onClick={loadTemporarySandboxData}
-                    className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
-                  >
-                    + Load Demo
-                  </button>
-                )}
+                <button
+                  onClick={() => {
+                    setSelectedMonthKey(null);
+                    setActiveAudit(null);
+                  }}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                    activeAudit === null && selectedMonthKey === null
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                      : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+                  }`}
+                  title="View Total Aggregate Dashboard"
+                >
+                  Total Overview
+                </button>
               </div>
 
               {/* Document List or Clean State */}
@@ -140,7 +153,7 @@ export default function Home() {
                       Live Workspace Clean
                     </p>
                     <p className="text-[11px] text-[#86868b] leading-relaxed">
-                      Upload any medical bill, invoice, or vendor quote PDF to trigger Gemini 3.1 auditing.
+                      Upload any medical bill, invoice, or vendor quote PDF to trigger Gemini 3.5 auditing.
                     </p>
                     <button
                       onClick={loadTemporarySandboxData}
@@ -243,13 +256,22 @@ export default function Home() {
               )}
             </AnimatePresence>
 
-            {/* Right Main Canvas: Fully Fluid & Responsive */}
+            {/* Right Main Canvas: Total Dashboard Overview by default, or specific audit detail */}
             <main className="flex-1 h-full overflow-y-auto bg-[#fbfbfd] dark:bg-[#000000] p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
               {activeAudit ? (
                 <>
                   {/* Document Header & Responsive Action Bar */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-black/[0.06] dark:border-white/[0.08]">
                     <div>
+                      {/* Back to Overview Button */}
+                      <button
+                        onClick={() => setActiveAudit(null)}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline mb-2 transition-colors cursor-pointer"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        <span>Back to Total Dashboard Overview</span>
+                      </button>
+
                       <div className="flex items-center flex-wrap gap-2">
                         <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[#1d1d1f] dark:text-white">
                           {activeAudit.title}
@@ -342,7 +364,7 @@ export default function Home() {
                   }}
                 />
               ) : (
-                /* Aggregate Financial Overview Canvas */
+                /* Total Aggregate Financial Dashboard Overview (Default on Load) */
                 <div className="space-y-6">
                   <AggregateOverview
                     audits={allAudits}
@@ -350,7 +372,7 @@ export default function Home() {
                       setSelectedMonthKey(null);
                       setActiveAudit(audit);
                     }}
-                    onScanNow={() => triggerManualSentryScan(undefined, 10)}
+                    onScanNow={() => triggerManualSentryScan(undefined, 15)}
                     onLoadDemo={loadTemporarySandboxData}
                   />
                   <div className="max-w-2xl mx-auto pt-2">

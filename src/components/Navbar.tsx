@@ -5,11 +5,11 @@ import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from './ThemeToggle';
 import { BrandLogo } from './BrandLogo';
-import { LayoutDashboard, MessageSquareText, Settings, BarChart3, Menu, User as UserIcon, Zap, X } from 'lucide-react';
+import { LayoutDashboard, MessageSquareText, Settings, BarChart3, Menu, User as UserIcon, Zap, X, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export function Navbar({ onToggleMobileSidebar }: { onToggleMobileSidebar?: () => void }) {
-  const { currentView, setCurrentView, loadPresetAudit, isSandboxDemoActive, clearSandboxData, loadTemporarySandboxData } = useApp();
+  const { currentView, setCurrentView, setActiveAudit, loadPresetAudit, isSandboxDemoActive, clearSandboxData, loadTemporarySandboxData } = useApp();
   const { user, openAuthModal } = useAuth();
 
   return (
@@ -45,9 +45,35 @@ export function Navbar({ onToggleMobileSidebar }: { onToggleMobileSidebar?: () =
 
       {/* Center: Segmented Navigation Control */}
       <div className="flex items-center bg-black/5 dark:bg-white/10 p-0.5 rounded-xl border border-black/[0.04] dark:border-white/[0.06] shrink-0">
+        {/* Welcome Tour */}
+        <button
+          onClick={() => setCurrentView('welcome')}
+          className={`relative px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 sm:gap-1.5 transition-colors ${
+            currentView === 'welcome'
+              ? 'text-[#1d1d1f] dark:text-white'
+              : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+          }`}
+        >
+          {currentView === 'welcome' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="absolute inset-0 bg-white dark:bg-[#18181b] rounded-lg shadow-sm"
+              transition={{ type: 'spring', bounce: 0.12, duration: 0.3 }}
+            />
+          )}
+          <span className="relative z-10 flex items-center gap-1 sm:gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+            <span className="hidden md:inline">Welcome Tour</span>
+            <span className="md:hidden">Tour</span>
+          </span>
+        </button>
+
         {/* Command Center */}
         <button
-          onClick={() => setCurrentView('dashboard')}
+          onClick={() => {
+            setActiveAudit(null);
+            setCurrentView('dashboard');
+          }}
           className={`relative px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 sm:gap-1.5 transition-colors ${
             currentView === 'dashboard'
               ? 'text-[#1d1d1f] dark:text-white'

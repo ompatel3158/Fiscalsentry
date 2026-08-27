@@ -1,0 +1,19 @@
+name: FiscalSentry 24/7 Autonomous Background Sentry
+
+on:
+  schedule:
+    # Runs every 1 hour (24 times per day)
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  hourly_sentry_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Autonomous Sentry Batch Ingestion & Audit
+        run: |
+          echo "🛡️ Triggering FiscalSentry Autonomous Hourly Sentry Worker..."
+          RESPONSE=$(curl -s -X GET "https://fiscalsentry-void.web.app/api/sentry/poll" \
+            -H "Accept: application/json" \
+            -H "User-Agent: FiscalSentry-Autonomous-Worker/1.0")
+          echo "Sentry Response: $RESPONSE"

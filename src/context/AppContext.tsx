@@ -15,13 +15,13 @@ import {
   getUserAuditsFromFirestore,
 } from '@/lib/firebase';
 import { fetchFinancialEmailsFromGmail, extractBankTransactionFromText, isPromotionalOrMarketingEmail } from '@/lib/gmail';
-import { auditFinancialDocument } from '@/lib/gemini';
+import { auditFinancialDocument, auditBatchFinancialEmails } from '@/lib/gemini';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 
 interface AppContextType {
-  currentView: 'dashboard' | 'chat' | 'analytics' | 'settings';
-  setCurrentView: (view: 'dashboard' | 'chat' | 'analytics' | 'settings') => void;
+  currentView: 'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings';
+  setCurrentView: (view: 'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings') => void;
   allAudits: AuditResult[];
   activeAudit: AuditResult | null;
   setActiveAudit: (audit: AuditResult | null) => void;
@@ -50,9 +50,17 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const { user, userProfile, googleAccessToken, connectGoogleWorkspace } = useAuth();
-  const [currentView, setCurrentView] = useState<'dashboard' | 'chat' | 'analytics' | 'settings'>('dashboard');
   
-  // 1. Initialize allAudits from localStorage immediately on startup
+  // 1. Initial view: show Welcome page on first-time visit, otherwise Dashboard
+  const [currentView, setCurrentView] = useState<'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings'>(() => {
+    if (typeof window !== 'undefined') {
+      const seen = localStorage.getItem('fs_has_seen_welcome');
+      if (!seen) return 'welcome';
+    }
+    return 'dashboard';
+  });
+  
+  // 2. Initialize allAudits from localStorage immediately on startup
   const [allAudits, setAllAudits] = useState<AuditResult[]>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -66,16 +74,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return [];
   });
 
-  // 2. Initialize activeAudit from localStorage
-  const [activeAudit, setActiveAudit] = useState<AuditResult | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cachedActive = localStorage.getItem('fs_cached_active_audit');
-        if (cachedActive) return JSON.parse(cachedActive);
-      } catch (_) {}
-    }
-    return null;
-  });
+  // 3. Initialize activeAudit as null by default so user is always greeted with the Total Dashboard Overview
+  const [activeAudit, setActiveAudit] = useState<AuditResult | null>(null);
 
   const [isSandboxDemoActive, setIsSandboxDemoActive] = useState<boolean>(false);
 
@@ -141,7 +141,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
-  // Sync allAudits & activeAudit to localStorage whenever they change
+  // Sync allAudits to localStorage whenever they change
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -152,25 +152,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [allAudits]);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        if (activeAudit) {
-          localStorage.setItem('fs_cached_active_audit', JSON.stringify(activeAudit));
-        } else {
-          localStorage.removeItem('fs_cached_active_audit');
-        }
-      } catch (_) {}
-    }
-  }, [activeAudit]);
-
   // Load user's private audits from Firestore when signed in
   useEffect(() => {
     if (user?.uid && !isSandboxDemoActive) {
       getUserAuditsFromFirestore(user.uid).then((storedAudits) => {
         if (storedAudits && storedAudits.length > 0) {
           setAllAudits((prev) => {
-            // Merge Firestore audits with in-memory ones, avoiding duplicates
             const combined = [...storedAudits];
             prev.forEach((p) => {
               if (!combined.some((c) => c.id === p.id)) {
@@ -180,9 +167,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return combined;
           });
 
-          if (!activeAudit) {
-            setActiveAudit(storedAudits[0]);
-          }
+          // Keep activeAudit null by default so user sees the Total Dashboard Overview
 
           const totalDisputed = storedAudits.reduce((acc, a) => acc + (a.potentialRecoveryAmount || 0), 0);
           setSentryConfig((prev) => ({
@@ -527,128 +512,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
 
             if (!isSilent) {
-              toast.loading(`Found ${unAuditedEmails.length} new transactions! Gemini auditing in batch...`, {
+              toast.loading(`Evaluating ${unAuditedEmails.length} new messages in 1 Gemini batch...`, {
                 id: 'sentry-scan',
               });
             }
 
-            const newAudits: AuditResult[] = [];
             const activeModel = userProfile?.preferredModel || 'gemini-3.1-flash-lite';
+            
+            // Execute ONE SINGLE GEMINI API CALL for the entire batch
+            const batchAudit = await auditBatchFinancialEmails(unAuditedEmails, activeModel);
 
-            // Audit each unAudited email with Gemini
-            for (let i = 0; i < unAuditedEmails.length; i++) {
-              const targetEmail = unAuditedEmails[i];
-              if (!isSilent) {
-                toast.loading(`Auditing transaction ${i + 1} of ${unAuditedEmails.length}: "${targetEmail.subject}"...`, {
-                  id: 'sentry-scan',
-                });
-              }
-
-              const docText = `
-Subject: ${targetEmail.subject}
-From: ${targetEmail.sender} (${targetEmail.senderEmail})
-Date: ${targetEmail.date}
-Snippet: ${targetEmail.snippet}
-Content:
-${targetEmail.bodyText.substring(0, 4000)}
-`;
-              const attachment = targetEmail.attachments[0];
-              const realAudit = await auditFinancialDocument(
-                docText,
-                attachment?.dataBase64,
-                attachment?.mimeType || 'application/pdf',
-                activeModel
-              );
-
-              // If Gemini classified it as promotional or $0 non-financial notice, skip it
-              if (realAudit.isPromotionalOrNonFinancial) {
-                console.log(`[Sentry] Skipped promotional offer: "${targetEmail.subject}"`);
-                continue;
-              }
-
-              realAudit.emailId = targetEmail.id;
-              if (!realAudit.title || realAudit.title.includes('Statement')) {
-                realAudit.title =
-                  targetEmail.subject.length > 40
-                    ? targetEmail.subject.substring(0, 40) + '...'
-                    : targetEmail.subject;
-              }
-              if (!realAudit.providerOrVendor) {
-                realAudit.providerOrVendor = targetEmail.sender.replace(/<.*?>/g, '').trim();
-              }
-              realAudit.rawDocumentText = docText;
-
-              // Direct Regex Bank Transaction Parsing & Reconciliation
-              const parsedBank = extractBankTransactionFromText(docText);
-              if (parsedBank) {
-                if (parsedBank.amount && parsedBank.amount > 0 && (!realAudit.totalBilledAmount || realAudit.totalBilledAmount === 0)) {
-                  realAudit.totalBilledAmount = parsedBank.amount;
-                }
-                if (parsedBank.currency) {
-                  realAudit.currency = parsedBank.currency;
-                  realAudit.currencySymbol = parsedBank.currencySymbol;
-                }
-                if (parsedBank.transactionType) {
-                  realAudit.transactionType = parsedBank.transactionType;
-                  if (parsedBank.transactionType === 'unblocked_lien') {
-                    realAudit.actualNetSpend = 0;
-                    realAudit.isReconciled = true;
-                    realAudit.reconciliationNote = 'IPO Mandate Released / Revoked (Net Spend: 0.00)';
-                  } else if (parsedBank.transactionType === 'hold_lien') {
-                    realAudit.actualNetSpend = 0;
-                    realAudit.isReconciled = true;
-                    realAudit.reconciliationNote = 'IPO Application Hold (Temporary Lien)';
-                  } else if (parsedBank.transactionType === 'refund') {
-                    realAudit.actualNetSpend = 0;
-                    realAudit.isReconciled = true;
-                    realAudit.reconciliationNote = 'Refund Processed (Net Spend: 0.00)';
-                  }
-                }
-                if (parsedBank.merchant && (!realAudit.providerOrVendor || realAudit.providerOrVendor.length < 2)) {
-                  realAudit.providerOrVendor = parsedBank.merchant;
-                }
-              }
-
-              // Fallback Currency Detection if not returned by LLM or Parser
-              if (!realAudit.currencySymbol) {
-                if (/₹|INR|Rs\.?|Rupees|UPI|HDFC|ICICI|SBI|Axis|Paytm|PhonePe|Zerodha|Groww/i.test(docText)) {
-                  realAudit.currency = 'INR';
-                  realAudit.currencySymbol = '₹';
-                } else if (/€|EUR|Euro/i.test(docText)) {
-                  realAudit.currency = 'EUR';
-                  realAudit.currencySymbol = '€';
-                } else if (/£|GBP|Pound/i.test(docText)) {
-                  realAudit.currency = 'GBP';
-                  realAudit.currencySymbol = '£';
-                } else {
-                  realAudit.currency = 'USD';
-                  realAudit.currencySymbol = '$';
-                }
-              }
-
-              newAudits.push(realAudit);
-              // Save each to Firestore
-              if (user?.uid) {
-                saveUserAuditToFirestore(user.uid, realAudit);
-              }
-            }
-
-            if (newAudits.length > 0) {
-              // Update state and localStorage with all newly audited statements
+            if (batchAudit) {
+              // Add the single consolidated hourly audit to the ledger
               setAllAudits((prev) => {
-                const updated = [...newAudits, ...prev];
+                const updated = [batchAudit, ...prev.filter((a) => a.id !== batchAudit.id)];
                 if (typeof window !== 'undefined') {
                   localStorage.setItem('fs_cached_audits', JSON.stringify(updated));
                 }
                 return updated;
               });
-              setActiveAudit(newAudits[0]);
 
-              const totalNewRecovery = newAudits.reduce((sum, a) => sum + (a.potentialRecoveryAmount || 0), 0);
+              // Keep activeAudit null so Total Dashboard Overview remains visible with updated metrics
+              setActiveAudit(null);
+
+              if (user?.uid) {
+                saveUserAuditToFirestore(user.uid, batchAudit);
+              }
+
+              const transactionCount = batchAudit.lineItems?.length || 1;
+              const recoveryAmount = batchAudit.potentialRecoveryAmount || 0;
+
               setSentryConfig((prev) => ({
                 ...prev,
-                totalDocumentsProcessed: prev.totalDocumentsProcessed + newAudits.length,
-                totalDisputedAmount: prev.totalDisputedAmount + totalNewRecovery,
+                totalDocumentsProcessed: prev.totalDocumentsProcessed + transactionCount,
+                totalDisputedAmount: prev.totalDisputedAmount + recoveryAmount,
               }));
 
               setSentryLogs((prev) => [
@@ -657,20 +554,22 @@ ${targetEmail.bodyText.substring(0, 4000)}
                   timestamp: new Date().toLocaleTimeString(),
                   source: 'gmail',
                   status: 'success',
-                  message: `Audited ${newAudits.length} new statements. Disputed +${totalNewRecovery.toFixed(2)}`,
+                  message: `1-Shot Batch Sentry: Audited ${unAuditedEmails.length} emails into 1 consolidated digest (${transactionCount} transactions).`,
                 },
                 ...prev.slice(0, 15),
               ]);
 
-              toast.success('Autonomous Sentry Ingestion Complete!', {
+              toast.success('Autonomous Sentry 1-Shot Ingestion Complete!', {
                 id: 'sentry-scan',
-                description: `Processed ${newAudits.length} genuine financial transactions.`,
+                description: `Processed ${unAuditedEmails.length} emails in 1 Gemini call (${transactionCount} verified transactions added).`,
               });
-            } else if (!isSilent) {
-              toast.info('Inbox Checked', {
-                id: 'sentry-scan',
-                description: 'No new financial liabilities found (promotional offers excluded).',
-              });
+            } else {
+              if (!isSilent) {
+                toast.info('Inbox Checked', {
+                  id: 'sentry-scan',
+                  description: 'All recent items were promotional/informational. Zero liabilities added.',
+                });
+              }
             }
             return;
           }
