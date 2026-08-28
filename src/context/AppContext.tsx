@@ -246,7 +246,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       MOCK_AUDITS['grant-clean-energy-rebate'],
     ];
     setAllAudits(sampleAudits);
-    setActiveAudit(sampleAudits[0]);
+    setActiveAudit(null);
     setIsSandboxDemoActive(true);
     setSentryConfig((prev) => ({
       ...prev,
