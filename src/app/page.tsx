@@ -257,7 +257,7 @@ export default function Home() {
             </AnimatePresence>
 
             {/* Right Main Canvas: Total Dashboard Overview by default, or specific audit detail */}
-            <main className="flex-1 h-full overflow-y-auto bg-[#fbfbfd] dark:bg-[#000000] p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
+            <main className="flex-1 h-full overflow-y-auto overflow-x-hidden bg-[#fbfbfd] dark:bg-[#000000] p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
               {activeAudit ? (
                 <>
                   {/* Document Header & Responsive Action Bar */}

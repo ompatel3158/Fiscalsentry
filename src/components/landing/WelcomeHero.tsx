@@ -54,11 +54,11 @@ export function WelcomeHero() {
   };
 
   return (
-    <div className="flex-1 w-full h-full overflow-y-auto bg-[#fbfbfd] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7]">
+    <div className="flex-1 w-full h-full overflow-y-auto overflow-x-hidden bg-[#fbfbfd] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7]">
       {/* 1. Hero Section */}
-      <section className="relative px-4 sm:px-6 lg:px-8 pt-12 sm:pt-20 pb-16 max-w-6xl mx-auto text-center space-y-8">
+      <section className="relative px-4 sm:px-6 lg:px-8 pt-10 sm:pt-20 pb-12 sm:pb-16 max-w-6xl mx-auto text-center space-y-6 sm:space-y-8">
         {/* Glow backdrop */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 sm:w-[600px] h-96 bg-emerald-500/10 dark:bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 sm:w-[500px] h-72 sm:h-96 bg-emerald-500/10 dark:bg-emerald-500/15 rounded-full blur-3xl pointer-events-none max-w-full" />
 
         {/* Badge */}
         <motion.div
@@ -78,7 +78,7 @@ export function WelcomeHero() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="space-y-4"
         >
-          <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-[#1d1d1f] dark:text-white leading-[1.1]">
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-[#1d1d1f] dark:text-white leading-[1.15] break-words">
             The Autonomous AI Agent That Protects Your Money & Automates Financial Paperwork
           </h1>
           <p className="text-base sm:text-xl text-[#86868b] max-w-3xl mx-auto font-normal leading-relaxed">

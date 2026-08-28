@@ -199,9 +199,9 @@ export function FinancialYearView() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+    <div className="max-w-7xl mx-auto p-3 sm:p-6 lg:p-8 space-y-6">
       {/* Top Header & Custom Date Selector */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-[#09090b] rounded-3xl p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-xs">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-[#09090b] rounded-3xl p-4 sm:p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-xs">
         <div>
           <div className="flex items-center gap-2">
             <span className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">

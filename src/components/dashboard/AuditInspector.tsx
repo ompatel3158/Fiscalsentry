@@ -75,7 +75,7 @@ export function AuditInspector() {
   return (
     <div className="space-y-4">
       {/* Top Breadcrumb & Document Header Card */}
-      <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-4">
+      <div className="p-4 sm:p-6 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <button
@@ -185,7 +185,7 @@ export function AuditInspector() {
       {activeTab === 'line_items' ? (
         <div className="rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[580px] text-left text-xs">
               <thead className="bg-black/[0.02] dark:bg-white/[0.02] text-[#86868b] font-semibold border-b border-black/[0.06] dark:border-white/[0.08]">
                 <tr>
                   <th className="py-2.5 px-4">Code</th>

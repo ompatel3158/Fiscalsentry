@@ -201,10 +201,10 @@ export function AggregateOverview({
   return (
     <div className="space-y-6">
       {/* Header Banner & Multi-Currency Filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#09090b] rounded-3xl p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#09090b] rounded-3xl p-4 sm:p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-xs">
         <div>
           <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <span className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </span>
             <div>
@@ -368,11 +368,11 @@ export function AggregateOverview({
       )}
 
       {/* Scanned Statements Grid */}
-      <div className="p-6 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="p-4 sm:p-6 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
           <h2 className="text-sm font-bold text-[#1d1d1f] dark:text-white flex items-center gap-2">
-            <Receipt className="w-4 h-4 text-emerald-500" />
-            All Audited Statements & Transactions ({filteredAudits.length})
+            <Receipt className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span>All Audited Statements & Transactions ({filteredAudits.length})</span>
           </h2>
           <span className="text-[11px] text-[#86868b]">
             Click any statement to inspect line items
