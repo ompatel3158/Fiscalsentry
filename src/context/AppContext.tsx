@@ -199,7 +199,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [googleAccessToken, userProfile?.googleAccessToken, isSandboxDemoActive]);
 
-  // Automated 1-Hour Background Poller (Runs periodically + on tab focus/return)
+  // Automated Background Poller (Runs periodically on 15m cadence + on tab focus/return)
   useEffect(() => {
     if (isSandboxDemoActive) return;
 
@@ -213,15 +213,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       if (!token) return;
 
+      const savedAt = Number(
+        typeof window !== 'undefined' ? localStorage.getItem('fs_google_token_saved_at') || '0' : '0'
+      );
+      const isTokenExpired = savedAt > 0 && Date.now() - savedAt > 3000 * 1000;
+
       const lastPoll = Number(
         typeof window !== 'undefined' ? localStorage.getItem('fs_last_poll_timestamp') || '0' : '0'
       );
       const now = Date.now();
-      const oneHour = 3600 * 1000;
+      const pollInterval = 15 * 60 * 1000; // Auto-poll every 15 minutes while active
 
-      // If 1 hour has elapsed since last scan
-      if (now - lastPoll >= oneHour) {
-        console.log('[Sentry Autonomous Worker] Running background hourly inbox check...');
+      if (now - lastPoll >= pollInterval || lastPoll === 0) {
+        if (isTokenExpired) {
+          console.warn('[Sentry Poller] Google Workspace token is older than 50 minutes (expired).');
+          setSentryLogs((prev) => [
+            {
+              id: 'log-' + Date.now(),
+              timestamp: new Date().toLocaleTimeString(),
+              source: 'gmail',
+              status: 'error',
+              message: 'Google Workspace token expired. Click Scan Mails or Reconnect in Settings to refresh.',
+            },
+            ...prev.slice(0, 15),
+          ]);
+          return;
+        }
+
+        console.log('[Sentry Autonomous Worker] Running background inbox check...');
         if (typeof window !== 'undefined') {
           localStorage.setItem('fs_last_poll_timestamp', now.toString());
         }
@@ -229,10 +248,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // Run on initial mount
-    checkAndRunHourlySentry();
+    // Run on initial mount with a short delay for hydration
+    const timerId = setTimeout(() => {
+      checkAndRunHourlySentry();
+    }, 1500);
 
-    // Run whenever window/tab becomes active or focused (e.g. user returns days later)
+    // Run whenever window/tab becomes active or focused (e.g. user returns)
     const handleVisibilityOrFocus = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         checkAndRunHourlySentry();
@@ -248,6 +269,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const interval = setInterval(checkAndRunHourlySentry, 60 * 1000);
 
     return () => {
+      clearTimeout(timerId);
       if (typeof window !== 'undefined') {
         window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
         window.removeEventListener('focus', handleVisibilityOrFocus);

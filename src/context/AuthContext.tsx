@@ -33,6 +33,8 @@ interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
   googleAccessToken: string | null;
+  googleTokenSavedAt: number | null;
+  isGoogleTokenExpired: boolean;
   isLoading: boolean;
   isAuthModalOpen: boolean;
   authModalMode: 'login' | 'signup' | 'link';
@@ -55,22 +57,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
+  const [googleTokenSavedAt, setGoogleTokenSavedAt] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'signup' | 'link'>('login');
   const [pendingCredential, setPendingCredential] = useState<PendingCredential | null>(null);
   const [sessionDaysRemaining, setSessionDaysRemaining] = useState<number>(15);
 
-  // Restore token from localStorage / sessionStorage on mount
+  // Restore token and saved timestamp from localStorage / sessionStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedToken =
         localStorage.getItem('fs_google_token') || sessionStorage.getItem('fs_google_token');
+      const storedSavedAt = Number(localStorage.getItem('fs_google_token_saved_at') || '0');
       if (storedToken) {
         setGoogleAccessToken(storedToken);
       }
+      if (storedSavedAt) {
+        setGoogleTokenSavedAt(storedSavedAt);
+      }
     }
   }, []);
+
+  const isGoogleTokenExpired = React.useMemo(() => {
+    if (!googleAccessToken) return true;
+    if (!googleTokenSavedAt) return false;
+    // Google tokens strictly expire at 60 mins (3600s). Warn/expire at 50 mins (3000s)
+    return Date.now() - googleTokenSavedAt > 3000 * 1000;
+  }, [googleAccessToken, googleTokenSavedAt]);
 
   const closeAuthModal = () => {
     setIsAuthModalOpen(false);
@@ -169,11 +183,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const credential = GoogleAuthProvider.credentialFromResult(result);
         const token = credential?.accessToken || null;
 
+        const now = Date.now();
         if (token) {
           setGoogleAccessToken(token);
+          setGoogleTokenSavedAt(now);
           if (typeof window !== 'undefined') {
             localStorage.setItem('fs_google_token', token);
             sessionStorage.setItem('fs_google_token', token);
+            localStorage.setItem('fs_google_token_saved_at', now.toString());
           }
         }
 
@@ -181,7 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const synced = await syncUserProfile(result.user, {
           googleWorkspaceConnected: true,
           googleAccessToken: token || undefined,
-          googleTokenSavedAt: Date.now(),
+          googleTokenSavedAt: now,
         });
         if (synced) setUserProfile(synced);
 
@@ -339,6 +356,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         userProfile,
         googleAccessToken,
+        googleTokenSavedAt,
+        isGoogleTokenExpired,
         isLoading,
         isAuthModalOpen,
         authModalMode,
