@@ -168,7 +168,7 @@ exports.sentryScheduledWorker = (0, scheduler_1.onSchedule)({
             console.log(`[Firebase Cloud Function] Auditing ${deltaEmails.length} emails for user ${doc.id}...`);
             let summaryText = 'Autonomous Cloud Audit Completed.';
             if (genAI) {
-                const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+                const model = genAI.getGenerativeModel({ model: 'gemini-3.7-flash' });
                 const res = await model.generateContent([
                     { text: `You are Voidy AI (FiscalSentry). Evaluate these ${deltaEmails.length} financial emails:\n${JSON.stringify(deltaEmails)}\nOutput a summary of valid transactions or return null if promotional.` },
                 ]);
