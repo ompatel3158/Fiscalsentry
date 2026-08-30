@@ -71,7 +71,10 @@ export interface UserProfile {
   };
   googleWorkspaceConnected?: boolean;
   googleAccessToken?: string;
+  googleRefreshToken?: string;
   googleTokenSavedAt?: number;
+  lastSyncedTimestamp?: number;
+  auditedEmailIds?: string[];
   createdAt: string;
   updatedAt: string;
 }
