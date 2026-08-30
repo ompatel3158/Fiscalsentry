@@ -207,18 +207,18 @@ export async function fetchFinancialEmailsTiered(
     } else {
       customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:3d`;
     }
-    maxResults = 50;
+    maxResults = 75;
   } else if (tier === 'month') {
     lookbackDays = 31;
-    maxResults = 150;
+    maxResults = 300;
     customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:31d`;
   } else if (tier === 'quarter') {
     lookbackDays = 90;
-    maxResults = 250;
+    maxResults = 600;
     customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:90d`;
   } else if (tier === 'year') {
     lookbackDays = 365;
-    maxResults = 450;
+    maxResults = 1000;
     customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:365d`;
   }
 

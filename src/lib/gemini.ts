@@ -197,12 +197,93 @@ Output pure, valid JSON adhering to this TypeScript structure:
 }
 
 /**
- * Single-Call Batch Auditor:
- * Evaluates an entire hourly batch of emails in ONE SINGLE GEMINI API CALL.
+/**
+ * Helper to merge multiple sub-batch audit results into one consolidated master AuditResult
+ */
+function mergeSubAudits(audits: AuditResult[], allEmails: ExtractedEmail[]): AuditResult {
+  if (audits.length === 1) return audits[0];
+
+  const primaryAudit = audits[0];
+  const allLineItems = audits.flatMap((a) => a.lineItems || []);
+  const allActions = audits.flatMap((a) => a.actions || []);
+  const allEmailIds = Array.from(new Set(audits.flatMap((a) => a.emailIds || [])));
+
+  const totalBilled = audits.reduce((sum, a) => sum + (a.totalBilledAmount || 0), 0);
+  const totalBenchmark = audits.reduce((sum, a) => sum + (a.fairBenchmarkAmount || 0), 0);
+  const totalRecovery = audits.reduce((sum, a) => sum + (a.potentialRecoveryAmount || 0), 0);
+  const totalNetSpend = audits.reduce((sum, a) => sum + (a.actualNetSpend || a.totalBilledAmount || 0), 0);
+
+  const vendors = Array.from(new Set(audits.map((a) => a.providerOrVendor).filter(Boolean)));
+  const vendorTitle = vendors.slice(0, 3).join(', ') + (vendors.length > 3 ? ` +${vendors.length - 3} more` : '');
+
+  const sourceEmails = allEmails.map((e) => ({
+    messageId: e.id,
+    threadId: e.threadId,
+    subject: e.subject,
+    sender: e.sender,
+    senderEmail: e.senderEmail,
+    date: e.date,
+    snippet: e.snippet,
+    rawExcerpt: e.bodyText.substring(0, 400),
+    confidenceScore: 0.95,
+  }));
+
+  return {
+    ...primaryAudit,
+    id: 'audit-batch-' + Math.random().toString(36).substring(2, 9),
+    emailIds: allEmailIds,
+    sourceEmails,
+    title: `Consolidated Financial Ledger (${allLineItems.length} Transactions Audited)`,
+    providerOrVendor: vendorTitle || 'Multi-Vendor Financial Statement',
+    totalBilledAmount: totalBilled,
+    fairBenchmarkAmount: totalBenchmark,
+    potentialRecoveryAmount: totalRecovery,
+    actualNetSpend: totalNetSpend,
+    summary: `Comprehensive batch audit synchronized ${allLineItems.length} transactions totaling ${primaryAudit.currencySymbol}${totalBilled.toFixed(2)} across ${audits.length} ledger batches.`,
+    lineItems: allLineItems,
+    actions: allActions,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Scalable Batch Auditor:
+ * Evaluates large volumes of emails (up to 1,000+) in parallel sub-batches of 50 emails per Gemini API call.
  * Discards marketing/promotions, extracts real financial debits/credits/bills/IPO holds,
- * and consolidates the batch into at most 1 high-precision Hourly Audit Entry.
+ * and consolidates the sub-audits into a master Financial Ledger.
  */
 export async function auditBatchFinancialEmails(
+  emails: ExtractedEmail[],
+  preferredModel: string = 'gemini-3.1-flash-lite'
+): Promise<AuditResult | null> {
+  if (!emails || emails.length === 0) return null;
+
+  // Process large email batches in chunks of 50 per Gemini API call
+  if (emails.length > 50) {
+    console.log(`[Gemini Batch] Ingesting ${emails.length} emails across parallel 50-email Gemini chunks...`);
+    const chunkSize = 50;
+    const subBatches: ExtractedEmail[][] = [];
+    for (let i = 0; i < emails.length; i += chunkSize) {
+      subBatches.push(emails.slice(i, i + chunkSize));
+    }
+
+    const subResults = await Promise.all(
+      subBatches.map((subBatch) => auditSingleBatchOfEmails(subBatch, preferredModel))
+    );
+
+    const validAudits = subResults.filter((a): a is AuditResult => a !== null);
+    if (validAudits.length === 0) return null;
+
+    return mergeSubAudits(validAudits, emails);
+  }
+
+  return auditSingleBatchOfEmails(emails, preferredModel);
+}
+
+/**
+ * Evaluates a single batch of up to 50 emails with Gemini or deterministic regex fallback
+ */
+async function auditSingleBatchOfEmails(
   emails: ExtractedEmail[],
   preferredModel: string = 'gemini-3.1-flash-lite'
 ): Promise<AuditResult | null> {
