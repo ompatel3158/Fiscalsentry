@@ -200,7 +200,7 @@ exports.sentryScheduledWorker = (0, scheduler_1.onSchedule)({
 /**
  * 2. 🌐 Firebase HTTPS Callable Function: Manual Direct Sentry Poll
  */
-exports.sentryPollHttp = (0, https_1.onRequest)({ cors: true }, async (req, res) => {
+exports.sentryPollHttp = (0, https_1.onRequest)({ cors: true, invoker: 'public' }, async (req, res) => {
     res.json({
         success: true,
         engine: 'Firebase Cloud Functions (2nd Gen)',

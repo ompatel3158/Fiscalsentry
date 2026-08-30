@@ -179,7 +179,7 @@ export const sentryScheduledWorker = onSchedule(
 /**
  * 2. 🌐 Firebase HTTPS Callable Function: Manual Direct Sentry Poll
  */
-export const sentryPollHttp = onRequest({ cors: true }, async (req, res) => {
+export const sentryPollHttp = onRequest({ cors: true, invoker: 'public' }, async (req, res) => {
   res.json({
     success: true,
     engine: 'Firebase Cloud Functions (2nd Gen)',
