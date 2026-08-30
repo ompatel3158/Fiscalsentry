@@ -34,8 +34,21 @@ async function refreshGoogleAccessToken(refreshToken: string): Promise<string | 
 }
 
 export async function GET(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
-  const tokenFromHeader = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
+  const cronHeader = req.headers.get('x-cron-secret');
+
+  // Verify CRON_SECRET if configured
+  if (cronSecret && cronHeader !== cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    // If not a cron secret, check if it's a direct user bearer token
+    const userToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
+    return handlePoll(userToken);
+  }
+
+  const tokenFromHeader = authHeader?.startsWith('Bearer ') && authHeader !== `Bearer ${cronSecret}`
+    ? authHeader.substring(7)
+    : undefined;
+
   return handlePoll(tokenFromHeader);
 }
 

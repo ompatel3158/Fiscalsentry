@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/sentry/poll",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
