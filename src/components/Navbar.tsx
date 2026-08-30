@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Sun,
   Moon,
+  Bot,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -148,8 +149,8 @@ export function Navbar({ onToggleMobileSidebar }: { onToggleMobileSidebar?: () =
               />
             )}
             <span className="relative z-10 flex items-center gap-1.5">
-              <MessageSquareText className="w-3.5 h-3.5" />
-              <span>AI Workstation</span>
+              <Bot className="w-3.5 h-3.5 text-purple-500" />
+              <span>Voidy AI</span>
             </span>
           </button>
 
@@ -354,8 +355,8 @@ export function Navbar({ onToggleMobileSidebar }: { onToggleMobileSidebar?: () =
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <MessageSquareText className="w-4 h-4 text-purple-500" />
-                      <span>AI Workstation (Chat)</span>
+                      <Bot className="w-4 h-4 text-purple-500" />
+                      <span>Voidy AI (Chat)</span>
                     </div>
                     <ChevronRight className="w-3.5 h-3.5 opacity-50" />
                   </button>

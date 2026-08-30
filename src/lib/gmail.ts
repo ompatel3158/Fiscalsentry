@@ -205,20 +205,20 @@ export async function fetchFinancialEmailsTiered(
       const epochSeconds = Math.max(0, Math.floor(lastSyncedTimestamp / 1000) - 300); // 5 min buffer
       customQuery = `-category:promotions -category:social -is:draft -is:spam after:${epochSeconds}`;
     } else {
-      customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:2d`;
+      customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:3d`;
     }
-    maxResults = 35;
+    maxResults = 50;
   } else if (tier === 'month') {
     lookbackDays = 31;
-    maxResults = 60;
+    maxResults = 150;
     customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:31d`;
   } else if (tier === 'quarter') {
     lookbackDays = 90;
-    maxResults = 100;
+    maxResults = 250;
     customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:90d`;
   } else if (tier === 'year') {
     lookbackDays = 365;
-    maxResults = 150;
+    maxResults = 450;
     customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:365d`;
   }
 
@@ -227,7 +227,7 @@ export async function fetchFinancialEmailsTiered(
 
 /**
  * Searches the user's Gmail for all genuine payments, bank alerts, debits, receipts, bills, and financial documents
- * Filters out marketing promotions, coupons, and solicitations.
+ * Supports multi-page pagination with nextPageToken and chunked detail extraction.
  */
 export async function fetchFinancialEmailsFromGmail(
   accessToken: string,
@@ -243,38 +243,52 @@ export async function fetchFinancialEmailsFromGmail(
   const query = encodeURIComponent(
     explicitQuery || `-category:promotions -category:social -is:draft -is:spam newer_than:${daysLookback}d`
   );
-  const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=${maxResults}`;
 
   let messages: { id: string; threadId: string }[] = [];
+  let pageToken: string | undefined = undefined;
 
+  // 1. Paginated message ID collection
   try {
-    const listRes = await fetch(listUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: 'application/json',
-      },
-    });
+    while (messages.length < maxResults) {
+      const pageSize = Math.min(100, maxResults - messages.length);
+      const listUrl: string = pageToken
+        ? `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=${pageSize}&pageToken=${pageToken}`
+        : `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=${pageSize}`;
 
-    if (listRes.status === 401 || listRes.status === 403) {
-      throw new Error('GMAIL_AUTH_EXPIRED');
-    }
+      const listRes = await fetch(listUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+      });
 
-    if (listRes.ok) {
-      const listData = await listRes.json();
-      messages = listData.messages || [];
+      if (listRes.status === 401 || listRes.status === 403) {
+        throw new Error('GMAIL_AUTH_EXPIRED');
+      }
+
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        if (listData.messages && Array.isArray(listData.messages)) {
+          messages = [...messages, ...listData.messages];
+        }
+        pageToken = listData.nextPageToken;
+        if (!pageToken) break;
+      } else {
+        break;
+      }
     }
   } catch (err: any) {
     if (err.message === 'GMAIL_AUTH_EXPIRED') throw err;
   }
 
-  // Fallback: If newer_than returned 0, fetch latest inbox & updates messages without date restriction
+  // Fallback: If newer_than returned 0, fetch latest inbox & updates messages
   if (messages.length === 0) {
     try {
       const fallbackQuery = encodeURIComponent(
         `-category:promotions -category:social -is:draft -is:spam`
       );
       const fallbackListRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${fallbackQuery}&maxResults=${maxResults}`,
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${fallbackQuery}&maxResults=50`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -296,33 +310,6 @@ export async function fetchFinancialEmailsFromGmail(
     }
   }
 
-  // Final fallback to latest messages excluding promotions if needed
-  if (messages.length === 0) {
-    try {
-      const fallbackNoPromoQuery = encodeURIComponent(`-category:promotions -is:draft -is:spam`);
-      const inboxListRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${fallbackNoPromoQuery}&maxResults=35`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: 'application/json',
-          },
-        }
-      );
-
-      if (inboxListRes.status === 401 || inboxListRes.status === 403) {
-        throw new Error('GMAIL_AUTH_EXPIRED');
-      }
-
-      if (inboxListRes.ok) {
-        const inboxData = await inboxListRes.json();
-        messages = inboxData.messages || [];
-      }
-    } catch (err: any) {
-      if (err.message === 'GMAIL_AUTH_EXPIRED') throw err;
-    }
-  }
-
   if (messages.length === 0) {
     return [];
   }
@@ -336,147 +323,131 @@ export async function fetchFinancialEmailsFromGmail(
     return [];
   }
 
-  // 3. Fetch full message details in parallel
-  const emailPromises = candidateMessages.slice(0, maxResults).map(async (msg) => {
-    try {
-      const detailUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`;
-      const detailRes = await fetch(detailUrl, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/json',
-        },
-      });
+  // 3. Parallel chunked extraction (20 concurrent requests per chunk)
+  const results: ExtractedEmail[] = [];
+  const chunkSize = 20;
 
-      if (detailRes.status === 401 || detailRes.status === 403) {
-        throw new Error('GMAIL_AUTH_EXPIRED');
-      }
+  for (let i = 0; i < candidateMessages.length; i += chunkSize) {
+    const chunk = candidateMessages.slice(i, i + chunkSize);
+    const chunkPromises = chunk.map(async (msg) => {
+      try {
+        const detailUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`;
+        const detailRes = await fetch(detailUrl, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
+          },
+        });
 
-      if (!detailRes.ok) return null;
-      const data = await detailRes.json();
-
-      // Check message labels: Skip spam and trash
-      const labelIds: string[] = data.labelIds || [];
-      if (labelIds.includes('SPAM') || labelIds.includes('TRASH')) {
-        return null;
-      }
-
-      // Extract headers
-      const headers = data.payload?.headers || [];
-      const getHeader = (name: string) =>
-        headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
-
-      const rawSender = getHeader('From') || 'Unknown Sender';
-      const senderMatch = rawSender.match(/^(.*?)(?:<(.+?)>)?$/);
-      const sender = senderMatch && senderMatch[1].trim() ? senderMatch[1].replace(/["']/g, '').trim() : rawSender;
-      const senderEmail = senderMatch && senderMatch[2] ? senderMatch[2].trim() : rawSender;
-
-      const subject = getHeader('Subject') || 'Untitled Statement';
-      const date = getHeader('Date') || new Date().toISOString();
-      const snippet = data.snippet || '';
-
-      // Extract body text & attachments
-      let textAccumulator = '';
-      let htmlAccumulator = '';
-      const attachments: GmailAttachment[] = [];
-
-      const processPart = (part: any) => {
-        if (!part) return;
-
-        // Check text part
-        if (part.mimeType === 'text/plain' && part.body?.data) {
-          try {
-            const decoded = Buffer.from(part.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
-            textAccumulator += '\n' + decoded;
-          } catch (_) {}
+        if (detailRes.status === 401 || detailRes.status === 403) {
+          throw new Error('GMAIL_AUTH_EXPIRED');
         }
 
-        // Check HTML part
-        if (part.mimeType === 'text/html' && part.body?.data) {
-          try {
-            const decodedHtml = Buffer.from(part.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
-            htmlAccumulator += '\n' + cleanHtmlText(decodedHtml);
-          } catch (_) {}
+        if (!detailRes.ok) return null;
+        const data = await detailRes.json();
+
+        // Check message labels: Skip spam and trash
+        const labelIds: string[] = data.labelIds || [];
+        if (labelIds.includes('SPAM') || labelIds.includes('TRASH')) {
+          return null;
         }
 
-        // Check attachment part
-        if (part.filename && part.body?.attachmentId) {
-          attachments.push({
-            filename: part.filename,
-            mimeType: part.mimeType || 'application/pdf',
-            attachmentId: part.body.attachmentId,
-            size: part.body.size || 0,
-          });
-        }
+        // Extract headers
+        const headers = data.payload?.headers || [];
+        const getHeader = (name: string) =>
+          headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
 
-        if (part.parts && Array.isArray(part.parts)) {
-          part.parts.forEach(processPart);
-        }
-      };
+        const rawSender = getHeader('From') || 'Unknown Sender';
+        const senderMatch = rawSender.match(/^(.*?)(?:<(.+?)>)?$/);
+        const sender = senderMatch && senderMatch[1].trim() ? senderMatch[1].replace(/["']/g, '').trim() : rawSender;
+        const senderEmail = senderMatch && senderMatch[2] ? senderMatch[2].trim() : rawSender;
 
-      // Process root single-part body if available
-      if (data.payload?.body?.data) {
-        try {
-          const decoded = Buffer.from(data.payload.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
-          if (data.payload.mimeType === 'text/html') {
-            htmlAccumulator += cleanHtmlText(decoded);
-          } else {
-            textAccumulator += decoded;
+        const subject = getHeader('Subject') || 'Untitled Statement';
+        const date = getHeader('Date') || new Date().toISOString();
+        const snippet = data.snippet || '';
+
+        // Extract body text & attachments
+        let textAccumulator = '';
+        let htmlAccumulator = '';
+        const attachments: GmailAttachment[] = [];
+
+        const processPart = (part: any) => {
+          if (!part) return;
+
+          if (part.mimeType === 'text/plain' && part.body?.data) {
+            try {
+              const decoded = Buffer.from(part.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+              textAccumulator += '\n' + decoded;
+            } catch (_) {}
           }
-        } catch (_) {}
-      }
 
-      // Process multipart children
-      if (data.payload?.parts) {
-        data.payload.parts.forEach(processPart);
-      }
+          if (part.mimeType === 'text/html' && part.body?.data) {
+            try {
+              const decodedHtml = Buffer.from(part.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+              htmlAccumulator += '\n' + cleanHtmlText(decodedHtml);
+            } catch (_) {}
+          }
 
-      // Consolidate body text (prefer plain text, fallback to cleaned HTML, fallback to snippet)
-      const bodyText = (textAccumulator.trim() || htmlAccumulator.trim() || snippet).trim();
+          if (part.filename && part.body?.attachmentId) {
+            attachments.push({
+              filename: part.filename,
+              mimeType: part.mimeType || 'application/pdf',
+              attachmentId: part.body.attachmentId,
+              size: part.body.size || 0,
+            });
+          }
 
-      // Check anti-promotional heuristics: drop marketing emails
-      if (isPromotionalOrMarketingEmail(subject, snippet, sender, bodyText)) {
-        return null;
-      }
+          if (part.parts && Array.isArray(part.parts)) {
+            part.parts.forEach(processPart);
+          }
+        };
 
-      // If attachments exist, fetch data for the primary attachment
-      for (const att of attachments.slice(0, 1)) {
-        try {
-          const attUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}/attachments/${att.attachmentId}`;
-          const attRes = await fetch(attUrl, {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              Accept: 'application/json',
-            },
-          });
-          if (attRes.ok) {
-            const attData = await attRes.json();
-            if (attData.data) {
-              att.dataBase64 = attData.data.replace(/-/g, '+').replace(/_/g, '/');
+        if (data.payload?.body?.data) {
+          try {
+            const decoded = Buffer.from(data.payload.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+            if (data.payload.mimeType === 'text/html') {
+              htmlAccumulator += cleanHtmlText(decoded);
+            } else {
+              textAccumulator += decoded;
             }
-          }
-        } catch (_) {}
+          } catch (_) {}
+        }
+
+        if (data.payload?.parts) {
+          data.payload.parts.forEach(processPart);
+        }
+
+        const bodyText = (textAccumulator.trim() || htmlAccumulator.trim() || snippet).trim();
+
+        if (isPromotionalOrMarketingEmail(subject, snippet, sender, bodyText)) {
+          return null;
+        }
+
+        const parsedBankHint = extractBankTransactionFromText(`${subject} ${snippet} ${bodyText}`);
+
+        return {
+          id: msg.id,
+          threadId: msg.threadId,
+          sender,
+          senderEmail,
+          subject,
+          date,
+          snippet,
+          bodyText,
+          attachments,
+          parsedBankHint,
+          isLikelyFinancialTransaction: true,
+        } as ExtractedEmail;
+      } catch {
+        return null;
       }
+    });
 
-      const parsedBankHint = extractBankTransactionFromText(`${subject} ${snippet} ${bodyText}`);
+    const chunkResults = await Promise.all(chunkPromises);
+    chunkResults.forEach((r) => {
+      if (r) results.push(r);
+    });
+  }
 
-      return {
-        id: msg.id,
-        threadId: msg.threadId,
-        sender,
-        senderEmail,
-        subject,
-        date,
-        snippet,
-        bodyText,
-        attachments,
-        parsedBankHint,
-        isLikelyFinancialTransaction: true,
-      } as ExtractedEmail;
-    } catch {
-      return null;
-    }
-  });
-
-  const results = await Promise.all(emailPromises);
-  return results.filter((e): e is ExtractedEmail => e !== null);
+  return results;
 }
