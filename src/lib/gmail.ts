@@ -72,35 +72,35 @@ export function isPromotionalOrMarketingEmail(
 
   // Strong transactional signals (these are ALWAYS treated as real transactions, even if they have discount/reward words)
   const isDefiniteTransaction =
-    /(?:debited|credited|refunded|payment of|paid in full|transaction alert|upi transaction|upi-ref|imps|neft|rtgs|invoice #|invoice no|receipt for your order|order confirmed|e-statement|account statement|funds blocked|funds unblocked|mandate created|mandate revoked|mandate released|card ending in|card ending [0-9]{4}|billing statement|tax invoice|paid to|sent to\b|withdrawn from a\/c|deposited to a\/c|charged your card|your receipt from|order #)/i.test(
+    /(?:debited|credited|refunded|payment|paid|transaction alert|upi transaction|upi-ref|imps|neft|rtgs|invoice|receipt|order confirmed|order confirmation|e-statement|account statement|funds blocked|funds unblocked|mandate|card ending in|card ending [0-9]{4}|billing statement|tax invoice|paid to|sent to\b|withdrawn from|deposited to|charged your card|your receipt from|order #|swiggy|zomato|uber|ola|blinkit|zepto|bigbasket|amazon|flipkart|hdfc|icici|sbi|axis|kotak|paytm|phonepe|cred|groww|zerodha|indusind)/i.test(
       combined
     );
 
-  if (isDefiniteTransaction) {
+  const hasMonetaryAmount = /(?:₹|inr|rs\.?|\$|€|£)\s*[\d,]+(?:\.\d{1,2})?|debited\s*(?:rs|inr|₹|\$)?\s*[\d,]+|credited\s*(?:rs|inr|₹|\$)?\s*[\d,]+|amount of\s*(?:rs|inr|₹|\$)?\s*[\d,]+/i.test(
+    `${subject} ${snippet} ${bodyText.substring(0, 1500)}`
+  );
+
+  if (isDefiniteTransaction && hasMonetaryAmount) {
     return false;
   }
 
-  // Clear promotional subject patterns
+  // Clear promotional subject patterns without transactional proof
   const isMarketingSubject =
-    /(?:promotional offer|special offer|special deal|exclusive offer|discount|coupon|promo code|promo\b|flash sale|limited time offer|save up to|save \d+%|\d+% off|earn rewards|unlock rewards|cashback offer|free trial|gift card offer|membership offer|newsletter|don't miss out|last chance to save|sale is live|mega sale|deals of the day|upgrade your membership|shop now|new arrivals|buy 1 get 1|bogo\b|flat \d+% off|flat rs|flat \$)/i.test(
+    /(?:promotional offer|special offer|special deal|exclusive offer|discount on your next|coupon code|promo code|flash sale|limited time offer|save up to \d+%|save \d+%|\d+% off today|earn rewards on shopping|unlock rewards|cashback offer|free trial|gift card offer|membership offer|newsletter|don't miss out on savings|last chance to save|sale is live|mega sale|deals of the day|upgrade your membership|shop now|new arrivals|buy 1 get 1|bogo\b)/i.test(
       subject
     );
 
-  if (isMarketingSubject) {
+  if (isMarketingSubject && !hasMonetaryAmount) {
     return true;
   }
 
   // Promotional sender or snippet patterns without any monetary proof
   const isMarketingBody =
     /(?:use code [a-z0-9]+ to get|apply coupon|unsubscribe from this email|view in browser|promotional email|marketing communication|hurry, offer valid|claim your bonus|exclusive discount|promotional terms apply|this is a promotional message)/i.test(
-      snippet + ' ' + bodyText.substring(0, 800)
+      `${snippet} ${bodyText.substring(0, 800)}`
     );
 
-  const hasNoMonetaryTransaction = !/(?:₹|inr|rs\.?|\$|€|£)\s*[\d,]+(?:\.\d{1,2})?|debited|credited|paid|charged/i.test(
-    bodyText.substring(0, 1500)
-  );
-
-  if (isMarketingBody && hasNoMonetaryTransaction) {
+  if (isMarketingBody && !hasMonetaryAmount) {
     return true;
   }
 
@@ -189,16 +189,16 @@ export function extractBankTransactionFromText(text: string): {
  */
 export async function fetchFinancialEmailsFromGmail(
   accessToken: string,
-  maxResults: number = 35,
+  maxResults: number = 50,
   daysLookback: number = 15
 ): Promise<ExtractedEmail[]> {
   if (!accessToken) {
-    throw new Error('Google OAuth access token is required to fetch Gmail data.');
+    throw new Error('GMAIL_AUTH_EXPIRED');
   }
 
-  // 1. Broad query capturing ALL emails in Primary, Updates, and Notifications (Excluding ONLY promotions, social, and spam)
+  // 1. Broad query capturing candidate emails across Inbox, Updates, and Primary
   const query = encodeURIComponent(
-    `-category:promotions -category:social -is:draft -is:spam newer_than:${daysLookback}d`
+    `-category:social -is:draft -is:spam newer_than:${daysLookback}d`
   );
   const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=${maxResults}`;
 
@@ -212,17 +212,23 @@ export async function fetchFinancialEmailsFromGmail(
       },
     });
 
+    if (listRes.status === 401 || listRes.status === 403) {
+      throw new Error('GMAIL_AUTH_EXPIRED');
+    }
+
     if (listRes.ok) {
       const listData = await listRes.json();
       messages = listData.messages || [];
     }
-  } catch (_) {}
+  } catch (err: any) {
+    if (err.message === 'GMAIL_AUTH_EXPIRED') throw err;
+  }
 
   // Fallback: If newer_than returned 0, fetch latest inbox & updates messages without date restriction
   if (messages.length === 0) {
     try {
       const fallbackQuery = encodeURIComponent(
-        `-category:promotions -category:social -is:draft -is:spam`
+        `-category:social -is:draft -is:spam`
       );
       const fallbackListRes = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${fallbackQuery}&maxResults=${maxResults}`,
@@ -233,18 +239,25 @@ export async function fetchFinancialEmailsFromGmail(
           },
         }
       );
+
+      if (fallbackListRes.status === 401 || fallbackListRes.status === 403) {
+        throw new Error('GMAIL_AUTH_EXPIRED');
+      }
+
       if (fallbackListRes.ok) {
         const fallbackData = await fallbackListRes.json();
         messages = fallbackData.messages || [];
       }
-    } catch (_) {}
+    } catch (err: any) {
+      if (err.message === 'GMAIL_AUTH_EXPIRED') throw err;
+    }
   }
 
-  // Final fallback to latest inbox messages if needed
+  // Final fallback to latest messages if needed
   if (messages.length === 0) {
     try {
       const inboxListRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20`,
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -252,11 +265,18 @@ export async function fetchFinancialEmailsFromGmail(
           },
         }
       );
+
+      if (inboxListRes.status === 401 || inboxListRes.status === 403) {
+        throw new Error('GMAIL_AUTH_EXPIRED');
+      }
+
       if (inboxListRes.ok) {
         const inboxData = await inboxListRes.json();
         messages = inboxData.messages || [];
       }
-    } catch (_) {}
+    } catch (err: any) {
+      if (err.message === 'GMAIL_AUTH_EXPIRED') throw err;
+    }
   }
 
   if (messages.length === 0) {
@@ -274,12 +294,16 @@ export async function fetchFinancialEmailsFromGmail(
         },
       });
 
+      if (detailRes.status === 401 || detailRes.status === 403) {
+        throw new Error('GMAIL_AUTH_EXPIRED');
+      }
+
       if (!detailRes.ok) return null;
       const data = await detailRes.json();
 
-      // Check message labels: Skip if Gmail labeled it as PROMOTIONS or SPAM
+      // Check message labels: Skip spam and trash
       const labelIds: string[] = data.labelIds || [];
-      if (labelIds.includes('CATEGORY_PROMOTIONS') || labelIds.includes('SPAM')) {
+      if (labelIds.includes('SPAM') || labelIds.includes('TRASH')) {
         return null;
       }
 

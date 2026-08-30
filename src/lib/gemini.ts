@@ -223,6 +223,7 @@ export async function auditBatchFinancialEmails(
 
     return {
       id: 'audit-batch-' + Math.random().toString(36).substring(2, 9),
+      emailIds: validItems.map((v) => v.email.id),
       title: `Hourly Sentry Digest: ${validItems.length} Transactions Audited`,
       category: 'invoice_receipt',
       providerOrVendor: vendors.length > 30 ? vendors.substring(0, 30) + '...' : vendors || 'Multi-Vendor',
@@ -363,6 +364,7 @@ Output pure, valid JSON only.
 
     return {
       id: 'audit-batch-' + Math.random().toString(36).substring(2, 9),
+      emailIds: emails.map((e) => e.id),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       ...parsed,
@@ -382,6 +384,7 @@ Output pure, valid JSON only.
         }
         return {
           id: 'audit-batch-' + Math.random().toString(36).substring(2, 9),
+          emailIds: emails.map((e) => e.id),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           ...fbParsed,

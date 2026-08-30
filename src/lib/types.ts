@@ -101,6 +101,7 @@ export interface AuditResult {
   rawDocumentUrl?: string;
   rawDocumentText?: string;
   emailId?: string;
+  emailIds?: string[];
   createdAt: string;
   updatedAt: string;
 }

@@ -199,15 +199,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [googleAccessToken, userProfile?.googleAccessToken, isSandboxDemoActive]);
 
-  // Automated 1-Hour Background Poller (No user setup required)
+  // Automated 1-Hour Background Poller (Runs periodically + on tab focus/return)
   useEffect(() => {
     if (isSandboxDemoActive) return;
 
-    const runHourlyAutoCheck = async () => {
+    const checkAndRunHourlySentry = async () => {
       const token =
         googleAccessToken ||
         userProfile?.googleAccessToken ||
-        (typeof window !== 'undefined' ? localStorage.getItem('fs_google_token') : null);
+        (typeof window !== 'undefined'
+          ? localStorage.getItem('fs_google_token') || sessionStorage.getItem('fs_google_token')
+          : null);
 
       if (!token) return;
 
@@ -217,25 +219,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now();
       const oneHour = 3600 * 1000;
 
+      // If 1 hour has elapsed since last scan
       if (now - lastPoll >= oneHour) {
+        console.log('[Sentry Autonomous Worker] Running background hourly inbox check...');
         if (typeof window !== 'undefined') {
           localStorage.setItem('fs_last_poll_timestamp', now.toString());
         }
-        console.log('[Sentry Autonomous Worker] Running background hourly inbox check...');
-        await triggerManualSentryScan(token, 2, true);
+        await triggerManualSentryScan(token, 15, true);
       }
     };
 
-    // Run immediately on mount if >1 hour has elapsed since last poll
-    runHourlyAutoCheck();
+    // Run on initial mount
+    checkAndRunHourlySentry();
 
-    // Schedule 1-hour interval timer
-    const intervalMs = 3600 * 1000;
-    const timer = setInterval(() => {
-      runHourlyAutoCheck();
-    }, intervalMs);
+    // Run whenever window/tab becomes active or focused (e.g. user returns days later)
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        checkAndRunHourlySentry();
+      }
+    };
 
-    return () => clearInterval(timer);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.addEventListener('focus', handleVisibilityOrFocus);
+    }
+
+    // Periodic heartbeat check every 60 seconds
+    const interval = setInterval(checkAndRunHourlySentry, 60 * 1000);
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+        window.removeEventListener('focus', handleVisibilityOrFocus);
+      }
+      clearInterval(interval);
+    };
   }, [isSandboxDemoActive, googleAccessToken, userProfile?.googleAccessToken]);
 
   // Load Temporary Sandbox Data on Demand
@@ -268,6 +286,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem('fs_cached_audits');
       localStorage.removeItem('fs_cached_active_audit');
       localStorage.removeItem('fs_has_initial_synced');
+      localStorage.removeItem('fs_audited_email_ids');
     }
     setSentryConfig((prev) => ({
       ...prev,
@@ -447,9 +466,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             id: 'sentry-scan',
             description: 'Opening 1-Click Google Workspace authorization...',
           });
-          const authedUser = await connectGoogleWorkspace();
-          if (authedUser && (authedUser as any).googleAccessToken) {
-            activeToken = (authedUser as any).googleAccessToken;
+          const freshToken = await connectGoogleWorkspace();
+          if (freshToken) {
+            activeToken = freshToken;
           } else {
             return;
           }
@@ -470,7 +489,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Direct client-side batch Gmail REST API query
       if (activeToken && !isSandboxDemoActive) {
         try {
-          const realEmails = await fetchFinancialEmailsFromGmail(activeToken, 35, daysLookback);
+          const realEmails = await fetchFinancialEmailsFromGmail(activeToken, 50, daysLookback);
 
           if (realEmails.length > 0) {
             // Get cached list from localStorage and state
@@ -487,18 +506,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               } catch (_) {}
             }
 
-            // Filter out emails that have already been audited to avoid duplicates & repeated LLM calls
+            // Retrieve previously processed email IDs from localStorage
+            let storedAuditedIds: string[] = [];
+            if (typeof window !== 'undefined') {
+              try {
+                const raw = localStorage.getItem('fs_audited_email_ids');
+                if (raw) storedAuditedIds = JSON.parse(raw);
+              } catch (_) {}
+            }
+
+            const allAuditedEmailIds = new Set<string>([
+              ...storedAuditedIds,
+              ...existingAudits.flatMap((a) => (a.emailIds || (a.emailId ? [a.emailId] : []))),
+            ]);
+
+            // Filter out emails that have already been audited
             const unAuditedEmails = realEmails.filter((email) => {
-              // Pre-filter check: drop marketing emails
+              if (allAuditedEmailIds.has(email.id)) {
+                return false;
+              }
+              // Skip obvious promotional non-financial messages
               if (isPromotionalOrMarketingEmail(email.subject, email.snippet, email.sender, email.bodyText)) {
                 return false;
               }
-
-              return !existingAudits.some(
-                (existing) =>
-                  existing.emailId === email.id ||
-                  (existing.title === email.subject && existing.providerOrVendor.includes(email.sender))
-              );
+              return true;
             });
 
             if (unAuditedEmails.length === 0) {
@@ -508,6 +539,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   description: `All ${realEmails.length} statements from the last ${daysLookback} days are already audited and cached.`,
                 });
               }
+              setSentryLogs((prev) => [
+                {
+                  id: 'log-' + Date.now(),
+                  timestamp: new Date().toLocaleTimeString(),
+                  source: 'gmail',
+                  status: 'success',
+                  message: `Sentry Verified: ${realEmails.length} messages checked. Inbox is 100% up to date.`,
+                },
+                ...prev.slice(0, 15),
+              ]);
               return;
             }
 
@@ -522,7 +563,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // Execute ONE SINGLE GEMINI API CALL for the entire batch
             const batchAudit = await auditBatchFinancialEmails(unAuditedEmails, activeModel);
 
+            // Record all processed email IDs so they aren't re-audited unnecessarily
+            const processedIds = unAuditedEmails.map((e) => e.id);
+            const updatedAuditedIds = Array.from(new Set([...storedAuditedIds, ...processedIds]));
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('fs_audited_email_ids', JSON.stringify(updatedAuditedIds));
+            }
+
             if (batchAudit) {
+              batchAudit.emailIds = processedIds;
+
               // Add the single consolidated hourly audit to the ledger
               setAllAudits((prev) => {
                 const updated = [batchAudit, ...prev.filter((a) => a.id !== batchAudit.id)];
@@ -564,6 +614,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 description: `Processed ${unAuditedEmails.length} emails in 1 Gemini call (${transactionCount} verified transactions added).`,
               });
             } else {
+              setSentryLogs((prev) => [
+                {
+                  id: 'log-' + Date.now(),
+                  timestamp: new Date().toLocaleTimeString(),
+                  source: 'gmail',
+                  status: 'success',
+                  message: `Evaluated ${unAuditedEmails.length} items. All promotional offers discarded.`,
+                },
+                ...prev.slice(0, 15),
+              ]);
+
               if (!isSilent) {
                 toast.info('Inbox Checked', {
                   id: 'sentry-scan',
@@ -572,8 +633,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               }
             }
             return;
+          } else {
+            if (!isSilent) {
+              toast.info('No Statements Found', {
+                id: 'sentry-scan',
+                description: `No new messages found in the last ${daysLookback} days.`,
+              });
+            }
+            return;
           }
         } catch (gmailErr: any) {
+          if (gmailErr.message === 'GMAIL_AUTH_EXPIRED' || gmailErr.status === 401) {
+            console.log('[Sentry] Google Workspace Token Expired. Initiating refresh...');
+            if (!isSilent) {
+              toast.loading('Google Workspace Token Expired. Refreshing authorization...', { id: 'sentry-scan' });
+              const freshToken = await connectGoogleWorkspace();
+              if (freshToken) {
+                return await triggerManualSentryScan(freshToken, daysLookback, isSilent);
+              } else {
+                toast.error('Google Workspace Authorization Expired', {
+                  id: 'sentry-scan',
+                  description: 'Please sign in with Google to allow Sentry to read new statements.',
+                });
+                return;
+              }
+            } else {
+              setSentryLogs((prev) => [
+                {
+                  id: 'log-' + Date.now(),
+                  timestamp: new Date().toLocaleTimeString(),
+                  source: 'gmail',
+                  status: 'error',
+                  message: 'Google Workspace token expired. Click Scan Now to re-authorize.',
+                },
+                ...prev.slice(0, 15),
+              ]);
+              return;
+            }
+          }
           console.warn('[Sentry] Gmail extraction issue:', gmailErr);
         }
       }
