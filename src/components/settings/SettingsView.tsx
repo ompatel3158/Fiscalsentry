@@ -40,8 +40,8 @@ export function SettingsView() {
   } = useAuth();
   const { integrations, setIntegrations, triggerManualSentryScan } = useApp();
 
-  const [preferredModel, setPreferredModel] = useState<'gemini-3.7-flash' | 'gemini-3.7-pro' | 'gemini-3.6-flash' | 'gemini-3.5-flash-lite' | string>(
-    userProfile?.preferredModel || 'gemini-3.7-flash'
+  const [preferredModel, setPreferredModel] = useState<'gemini-2.0-flash' | 'gemini-2.0-pro' | 'gemini-2.0-flash-lite' | string>(
+    userProfile?.preferredModel || 'gemini-2.0-flash'
   );
   const [slackWebhook, setSlackWebhook] = useState(integrations.slack.webhookUrl || '');
   const [discordWebhook, setDiscordWebhook] = useState(integrations.discord.webhookUrl || '');
@@ -251,11 +251,11 @@ export function SettingsView() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Gemini 3.7 Flash */}
+          {/* Gemini 2.0 Flash */}
           <div
-            onClick={() => handleSelectModel('gemini-3.7-flash')}
+            onClick={() => handleSelectModel('gemini-2.0-flash')}
             className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-              preferredModel === 'gemini-3.7-flash'
+              preferredModel === 'gemini-2.0-flash'
                 ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-500/10 ring-1 ring-emerald-500'
                 : 'border-black/[0.06] dark:border-white/[0.08] hover:border-black/20 dark:hover:border-white/20'
             }`}
@@ -263,45 +263,45 @@ export function SettingsView() {
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-[#1d1d1f] dark:text-white flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5 text-amber-500" />
-                Gemini 3.7 Flash
+                Gemini 2.0 Flash
               </span>
-              {preferredModel === 'gemini-3.7-flash' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+              {preferredModel === 'gemini-2.0-flash' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
             </div>
             <p className="text-[11px] text-[#86868b] mt-1.5 leading-relaxed">
-              Flagship Default. Ultra-fast hybrid reasoning, sub-second latency, multimodal statement OCR, and intelligent batch reconciliation.
+              Flagship Default. Ultra-fast multimodal reasoning, sub-second statement OCR, and intelligent batch reconciliation.
             </p>
           </div>
 
-          {/* Gemini 3.7 Pro */}
+          {/* Gemini 2.0 Pro */}
           <div
-            onClick={() => handleSelectModel('gemini-3.7-pro')}
+            onClick={() => handleSelectModel('gemini-2.0-pro')}
             className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-              preferredModel === 'gemini-3.7-pro'
+              preferredModel === 'gemini-2.0-pro'
                 ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-500/10 ring-1 ring-emerald-500'
                 : 'border-black/[0.06] dark:border-white/[0.08] hover:border-black/20 dark:hover:border-white/20'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#1d1d1f] dark:text-white">Gemini 3.7 Pro</span>
-              {preferredModel === 'gemini-3.7-pro' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+              <span className="text-xs font-bold text-[#1d1d1f] dark:text-white">Gemini 2.0 Pro</span>
+              {preferredModel === 'gemini-2.0-pro' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
             </div>
             <p className="text-[11px] text-[#86868b] mt-1.5 leading-relaxed">
               Deep reasoning engine for multi-page hospital itemized bills, tax statutory compliance, and complex ERP contract dispute drafts.
             </p>
           </div>
 
-          {/* Gemini 3.5 Flash Lite */}
+          {/* Gemini 2.0 Flash Lite */}
           <div
-            onClick={() => handleSelectModel('gemini-3.5-flash-lite')}
+            onClick={() => handleSelectModel('gemini-2.0-flash-lite')}
             className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-              preferredModel === 'gemini-3.5-flash-lite'
+              preferredModel === 'gemini-2.0-flash-lite'
                 ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-500/10 ring-1 ring-emerald-500'
                 : 'border-black/[0.06] dark:border-white/[0.08] hover:border-black/20 dark:hover:border-white/20'
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#1d1d1f] dark:text-white">Gemini 3.5 Flash Lite</span>
-              {preferredModel === 'gemini-3.5-flash-lite' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+              <span className="text-xs font-bold text-[#1d1d1f] dark:text-white">Gemini 2.0 Flash Lite</span>
+              {preferredModel === 'gemini-2.0-flash-lite' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
             </div>
             <p className="text-[11px] text-[#86868b] mt-1.5 leading-relaxed">
               High-throughput lightweight model tailored for massive 1,000-email batch ingestion and rapid background polling.

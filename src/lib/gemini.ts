@@ -3,7 +3,7 @@ import { AuditResult, ChatMessage, RAGSourceCitation, normalizeCurrency } from '
 import { MOCK_AUDITS } from './mock-data';
 import { ExtractedEmail } from './gmail';
 
-export type SupportedModel = 'gemini-3.7-flash' | 'gemini-3.7-pro' | 'gemini-3.6-flash' | 'gemini-3.5-flash-lite' | 'gemini-3.1-flash-lite' | 'gemini-2.0-flash';
+export type SupportedModel = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.0-flash' | 'gemini-2.0-flash-lite';
 
 function getApiKey(): string {
   return process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
@@ -18,21 +18,19 @@ export function isGeminiConfigured(): boolean {
  * Normalizes model names to active Google Generative AI model endpoints
  */
 function resolveModelName(modelName?: string): string {
-  if (!modelName) return 'gemini-3.7-flash';
+  if (!modelName) return 'gemini-2.0-flash';
   
   switch (modelName) {
-    case 'gemini-3.7-flash':
-      return 'gemini-3.7-flash';
-    case 'gemini-3.7-pro':
-      return 'gemini-3.7-pro';
-    case 'gemini-3.6-flash':
-      return 'gemini-3.6-flash';
-    case 'gemini-3.5-flash-lite':
-      return 'gemini-3.5-flash-lite';
-    case 'gemini-3.1-flash-lite':
-      return 'gemini-3.1-flash-lite';
+    case 'gemini-2.5-flash':
+    case 'gemini-2.0-flash':
+      return 'gemini-2.0-flash';
+    case 'gemini-2.5-pro':
+    case 'gemini-2.0-pro':
+      return 'gemini-2.0-pro-exp-02-05';
+    case 'gemini-2.0-flash-lite':
+      return 'gemini-2.0-flash-lite';
     default:
-      return modelName;
+      return 'gemini-2.0-flash';
   }
 }
 
