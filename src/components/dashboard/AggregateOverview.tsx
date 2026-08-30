@@ -20,17 +20,30 @@ import {
   FileSpreadsheet,
   Zap,
   Globe,
+  ChevronDown,
+  BarChart3,
+  Check,
+  Clock,
+  CreditCard,
+  ArrowUpRight,
+  TrendingUp,
+  Wallet,
+  Bot,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 import { useAuth } from '@/context/AuthContext';
+import { useApp } from '@/context/AppContext';
+import { useChat } from '@/context/ChatContext';
 import { SourceEmailModal } from './SourceEmailModal';
 import { SourceEmailReference, FinancialCategory, UpcomingObligation } from '@/lib/types';
+import { SyncTier } from '@/lib/gmail';
+import { computeYearlyFinancialLedger } from '@/lib/financialManager';
 
 interface AggregateOverviewProps {
   audits: AuditResult[];
   onSelectAudit: (audit: AuditResult) => void;
-  onScanNow: () => void;
+  onScanNow: (tier?: SyncTier) => void;
   onLoadDemo: () => void;
 }
 
@@ -41,7 +54,11 @@ export function AggregateOverview({
   onLoadDemo,
 }: AggregateOverviewProps) {
   const { googleAccessToken, isGoogleTokenExpired, connectGoogleWorkspace } = useAuth();
+  const { setCurrentView, yearlyHealthReport } = useApp();
+  const { sendMessage } = useChat();
   const [selectedCurrencyFilter, setSelectedCurrencyFilter] = useState<string>('all');
+  const [activeOverviewTab, setActiveOverviewTab] = useState<'inbox' | 'yearly_math'>('inbox');
+  const [isTierDropdownOpen, setIsTierDropdownOpen] = useState<boolean>(false);
   const [inspectingSource, setInspectingSource] = useState<{
     sourceEmail?: SourceEmailReference | null;
     title?: string;
@@ -312,11 +329,11 @@ export function AggregateOverview({
 
         <div className="flex items-center gap-3 flex-wrap justify-center">
           <button
-            onClick={onScanNow}
+            onClick={() => onScanNow('delta')}
             className="px-4 py-2.5 rounded-2xl bg-black dark:bg-white text-white dark:text-black text-xs font-bold shadow-xs hover:opacity-90 active:scale-[0.97] transition-all flex items-center gap-1.5"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            Scan Gmail (Last 15 Days)
+            Scan Gmail (Quick Delta)
           </button>
 
           <button
@@ -402,372 +419,749 @@ export function AggregateOverview({
             </div>
           ) : null}
 
-          <button
-            onClick={onScanNow}
-            className="px-3.5 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs active:scale-[0.97] transition-all flex items-center gap-1.5"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Scan Mails
-          </button>
-        </div>
-      </div>
-
-      {/* Multi-Currency Summary Cards (When multiple currencies exist) */}
-      {currencyBreakdowns.length > 1 && selectedCurrencyFilter === 'all' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {currencyBreakdowns.map((cb) => (
-            <div
-              key={cb.currency}
-              onClick={() => setSelectedCurrencyFilter(cb.currency)}
-              className="p-4 rounded-2xl bg-black/[0.015] dark:bg-white/[0.02] border border-black/[0.06] dark:border-white/[0.08] hover:border-emerald-500/40 cursor-pointer transition-all space-y-1"
+          {/* Tiered Ingestion / Scan Now Dropdown */}
+          <div className="relative inline-flex rounded-2xl shadow-xs">
+            <button
+              onClick={() => onScanNow('delta')}
+              className="px-3.5 py-2 rounded-l-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold active:scale-[0.98] transition-all flex items-center gap-1.5"
+              title="Quick Delta: Ingests new emails since last sync in under 2s"
             >
-              <div className="flex items-center justify-between text-xs font-bold text-[#86868b]">
-                <span>{cb.currency} Portfolio</span>
-                <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-black/5 dark:bg-white/10">
-                  {cb.count} items
-                </span>
-              </div>
-              <div className="text-xl font-bold font-mono text-[#1d1d1f] dark:text-white">
-                {formatCurrency(cb.totalNet, cb.symbol, cb.currency)}
-              </div>
-              <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                +{formatCurrency(cb.totalDisputed, cb.symbol, cb.currency)} disputed recoveries
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Financial Overview (Income, Expenses, Subscriptions, Bills Due, Net Savings) */}
-      <div className="rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] p-5 sm:p-6 space-y-4 shadow-xs">
-        <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.08] pb-3">
-          <div className="flex items-center gap-2">
-            <PieChart className="w-4 h-4 text-emerald-500" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">
-              Personal Financial Inbox Overview
-            </h2>
-          </div>
-          <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full font-bold">
-            Autonomous 24/7 Engine
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {/* Income */}
-          <div className="p-4 rounded-2xl bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 space-y-1">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-              Total Income
-            </div>
-            <div className="text-lg sm:text-xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
-              {formatCurrency(stats.totalIncome, primarySymbol, selectedCurrencyFilter)}
-            </div>
-            <div className="text-[9px] text-[#86868b]">Salary & credits</div>
-          </div>
-
-          {/* Expenses */}
-          <div className="p-4 rounded-2xl bg-black/[0.015] dark:bg-white/[0.02] border border-black/[0.06] dark:border-white/[0.08] space-y-1">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[#86868b]">
-              Verified Expenses
-            </div>
-            <div className="text-lg sm:text-xl font-mono font-extrabold text-[#1d1d1f] dark:text-white">
-              {formatCurrency(stats.totalNetSpend, primarySymbol, selectedCurrencyFilter)}
-            </div>
-            <div className="text-[9px] text-[#86868b]">Bank & UPI debits</div>
-          </div>
-
-          {/* Subscriptions */}
-          <div className="p-4 rounded-2xl bg-purple-500/5 dark:bg-purple-500/10 border border-purple-500/20 space-y-1">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
-              Subscriptions
-            </div>
-            <div className="text-lg sm:text-xl font-mono font-extrabold text-purple-600 dark:text-purple-400">
-              {formatCurrency(stats.totalSubscriptionsAmount || stats.activeSubscriptions * (primarySymbol === '₹' ? 499 : 15), primarySymbol, selectedCurrencyFilter)}
-            </div>
-            <div className="text-[9px] text-purple-700 dark:text-purple-300 font-medium">
-              {stats.activeSubscriptions} active services
-            </div>
-          </div>
-
-          {/* Bills Due */}
-          <div className="p-4 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 space-y-1">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
-              Upcoming Bills Due
-            </div>
-            <div className="text-lg sm:text-xl font-mono font-extrabold text-amber-600 dark:text-amber-400">
-              {formatCurrency(stats.totalBillsDueAmount || (primarySymbol === '₹' ? 6320 : 350), primarySymbol, selectedCurrencyFilter)}
-            </div>
-            <div className="text-[9px] text-amber-700 dark:text-amber-300 font-medium">
-              Utilities & credit cards
-            </div>
-          </div>
-
-          {/* Net Savings */}
-          <div className="p-4 rounded-2xl bg-blue-500/5 dark:bg-blue-500/10 border border-blue-500/20 space-y-1 col-span-2 sm:col-span-1">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">
-              Net Savings
-            </div>
-            <div className="text-lg sm:text-xl font-mono font-extrabold text-blue-600 dark:text-blue-400">
-              {formatCurrency(stats.netSavings, primarySymbol, selectedCurrencyFilter)}
-            </div>
-            <div className="text-[9px] text-blue-700 dark:text-blue-300 font-medium">
-              Estimated liquidity
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Upcoming Obligations & Due Dates Timeline */}
-      <div className="rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] p-5 sm:p-6 space-y-4 shadow-xs">
-        <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.08] pb-3">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-blue-500" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">
-              Upcoming Obligations & Auto-Debits
-            </h2>
-          </div>
-          <span className="text-[11px] text-[#86868b]">
-            Direct Gmail Due Date Tracking
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {upcomingObligations.map((ob, idx) => (
-            <div
-              key={ob.id || idx}
-              className="p-4 rounded-2xl bg-black/[0.015] dark:bg-white/[0.02] border border-black/[0.06] dark:border-white/[0.08] hover:border-blue-500/30 transition-all space-y-2.5 flex flex-col justify-between"
+              <Zap className="w-3.5 h-3.5 text-emerald-200" />
+              <span>Scan Now</span>
+            </button>
+            <button
+              onClick={() => setIsTierDropdownOpen(!isTierDropdownOpen)}
+              className="px-2 py-2 rounded-r-2xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold border-l border-emerald-500/40 transition-all"
+              title="Select Ingestion Window"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                      {idx === 0 ? 'Tomorrow' : idx === 1 ? 'Next Week' : 'Scheduled'}
-                    </span>
-                    {ob.isAutoDebit && (
-                      <span className="px-1.5 py-0.5 rounded text-[8px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                        Auto-Debit
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs font-bold text-[#1d1d1f] dark:text-white mt-1.5 truncate">
-                    {ob.title}
-                  </div>
-                  <div className="text-[10px] text-[#86868b] truncate">
-                    {ob.provider} • Due {ob.dueDate}
-                  </div>
-                </div>
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
 
-                <div className="text-right shrink-0">
-                  <div className="text-sm font-mono font-bold text-[#1d1d1f] dark:text-white">
-                    {ob.currencySymbol}{ob.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-black/[0.04] dark:border-white/[0.06] text-[10px]">
+            {isTierDropdownOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-64 bg-white dark:bg-[#18181b] border border-black/[0.08] dark:border-white/[0.12] rounded-2xl shadow-xl p-1.5 z-50 space-y-1">
                 <button
-                  onClick={() =>
-                    setInspectingSource({
-                      sourceEmail: ob.sourceEmail || {
-                        messageId: 'msg-' + ob.id,
-                        subject: ob.title,
-                        sender: ob.provider,
-                        date: ob.dueDate,
-                        snippet: `Scheduled obligation of ${ob.currencySymbol}${ob.amount} for ${ob.provider}.`,
-                        confidenceScore: 0.97,
-                      },
-                      title: ob.title,
-                      amount: ob.amount,
-                      currencySymbol: ob.currencySymbol,
-                      currency: ob.currency,
-                      category: ob.category,
-                    })
-                  }
-                  className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline flex items-center gap-1"
+                  onClick={() => {
+                    setIsTierDropdownOpen(false);
+                    onScanNow('delta');
+                  }}
+                  className="w-full text-left p-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-start gap-2.5"
                 >
-                  <ShieldCheck className="w-3 h-3" />
-                  <span>Verify Source</span>
+                  <Zap className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-xs font-bold text-[#1d1d1f] dark:text-white">⚡ Quick Delta Sync</div>
+                    <div className="text-[10px] text-[#86868b]">Sync new emails since last check (Fastest)</div>
+                  </div>
                 </button>
 
-                <span className="text-[#86868b]">
-                  {ob.category.replace('_', ' ')}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+                <button
+                  onClick={() => {
+                    setIsTierDropdownOpen(false);
+                    onScanNow('month');
+                  }}
+                  className="w-full text-left p-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-start gap-2.5"
+                >
+                  <Calendar className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-xs font-bold text-[#1d1d1f] dark:text-white">📅 Current Month (30d)</div>
+                    <div className="text-[10px] text-[#86868b]">Reconcile monthly bills, salaries & debits</div>
+                  </div>
+                </button>
 
-      {/* KPI Ribbon */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* IPO & Lien Mandates */}
-        <div className="p-5 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-1">
-          <div className="text-[11px] font-bold text-[#86868b] uppercase tracking-wider flex items-center justify-between">
-            <span>IPO Holds & Mandates</span>
-            {stats.totalReleasedHolds > 0 ? (
-              <Unlock className="w-4 h-4 text-blue-500" />
-            ) : (
-              <Lock className="w-4 h-4 text-amber-500" />
+                <button
+                  onClick={() => {
+                    setIsTierDropdownOpen(false);
+                    onScanNow('year');
+                  }}
+                  className="w-full text-left p-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-start gap-2.5"
+                >
+                  <BarChart3 className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-xs font-bold text-[#1d1d1f] dark:text-white">📈 1-Year Ledger Optimization</div>
+                    <div className="text-[10px] text-[#86868b]">Deep 365-day math & tax/trend mapping</div>
+                  </div>
+                </button>
+              </div>
             )}
           </div>
-          <div className="text-2xl font-extrabold tracking-tight text-blue-600 dark:text-blue-400 font-mono">
-            {formatCurrency(stats.totalReleasedHolds || stats.totalHolds, primarySymbol, selectedCurrencyFilter)}
-          </div>
-          <div className="text-[11px] text-blue-700 dark:text-blue-300 font-semibold">
-            {stats.totalReleasedHolds > 0 ? '✓ Released / Unallocated (₹0 Net)' : 'Active hold'}
-          </div>
-        </div>
-
-        {/* Total Recoveries / Savings */}
-        <div className="p-5 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-1">
-          <div className="text-[11px] font-bold text-[#86868b] uppercase tracking-wider flex items-center justify-between">
-            <span>Disputed Overcharges</span>
-            <TrendingDown className="w-4 h-4 text-emerald-500" />
-          </div>
-          <div className="text-2xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 font-mono">
-            +{formatCurrency(stats.totalRecoveries, primarySymbol, selectedCurrencyFilter)}
-          </div>
-          <div className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
-            Statutory violations & savings flagged
-          </div>
-        </div>
-
-        {/* Subscriptions Active */}
-        <div className="p-5 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-1">
-          <div className="text-[11px] font-bold text-[#86868b] uppercase tracking-wider flex items-center justify-between">
-            <span>Subscriptions Monitored</span>
-            <Sparkles className="w-4 h-4 text-purple-500" />
-          </div>
-          <div className="text-2xl font-extrabold tracking-tight text-[#1d1d1f] dark:text-white">
-            {stats.activeSubscriptions}
-          </div>
-          <div className="text-[11px] text-[#86868b]">
-            Auto-renewals & rate monitors
-          </div>
         </div>
       </div>
 
-      {/* Smart Reconciliation Callout if IPO unblock or refund exists */}
-      {stats.reconciledItems.length > 0 && (
-        <div className="p-4 rounded-3xl bg-blue-500/5 dark:bg-blue-500/10 border border-blue-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
-              <Unlock className="w-4 h-4" />
+      {/* View Switcher: Active Financial Inbox vs Voidy AI 1-Year Financial Ledger */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-black/[0.06] dark:border-white/[0.08] pb-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setActiveOverviewTab('inbox')}
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-2 ${
+              activeOverviewTab === 'inbox'
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs'
+                : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+            }`}
+          >
+            <Receipt className="w-3.5 h-3.5" />
+            <span>Active Financial Inbox & Statements ({filteredAudits.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveOverviewTab('yearly_math')}
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-2 ${
+              activeOverviewTab === 'yearly_math'
+                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shadow-xs'
+                : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+            }`}
+          >
+            <Bot className="w-3.5 h-3.5 text-purple-500" />
+            <span>Voidy AI • 1-Year Ledger & Math Manager</span>
+            <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-500/20 text-purple-600 dark:text-purple-300 font-mono">
+              365d Math
+            </span>
+          </button>
+        </div>
+
+        <button
+          onClick={() => {
+            setCurrentView('chat');
+            sendMessage('Voidy, please analyze my 1-year financial ledger, month-over-month cash flow, and tell me what obligations are completed vs pending.');
+          }}
+          className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 text-xs font-bold transition-all active:scale-[0.97]"
+        >
+          <Bot className="w-3.5 h-3.5" />
+          <span>Ask Voidy AI</span>
+          <ArrowRight className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* TAB 1: ACTIVE FINANCIAL INBOX VIEW */}
+      {activeOverviewTab === 'inbox' && (
+        <div className="space-y-6">
+          {/* Multi-Currency Summary Cards (When multiple currencies exist) */}
+          {currencyBreakdowns.length > 1 && selectedCurrencyFilter === 'all' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {currencyBreakdowns.map((cb) => (
+                <div
+                  key={cb.currency}
+                  onClick={() => setSelectedCurrencyFilter(cb.currency)}
+                  className="p-4 rounded-2xl bg-black/[0.015] dark:bg-white/[0.02] border border-black/[0.06] dark:border-white/[0.08] hover:border-emerald-500/40 cursor-pointer transition-all space-y-1"
+                >
+                  <div className="flex items-center justify-between text-xs font-bold text-[#86868b]">
+                    <span>{cb.currency} Portfolio</span>
+                    <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-black/5 dark:bg-white/10">
+                      {cb.count} items
+                    </span>
+                  </div>
+                  <div className="text-xl font-bold font-mono text-[#1d1d1f] dark:text-white">
+                    {formatCurrency(cb.totalNet, cb.symbol, cb.currency)}
+                  </div>
+                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                    +{formatCurrency(cb.totalDisputed, cb.symbol, cb.currency)} disputed recoveries
+                  </div>
+                </div>
+              ))}
             </div>
-            <div>
-              <div className="text-xs font-bold text-[#1d1d1f] dark:text-white">
-                Smart Reconciliation: {stats.reconciledItems.length} Held/Refunded Items Netting Zero Expense
+          )}
+
+          {/* Financial Overview (Income, Expenses, Subscriptions, Bills Due, Net Savings) */}
+          <div className="rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] p-5 sm:p-6 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.08] pb-3">
+              <div className="flex items-center gap-2">
+                <PieChart className="w-4 h-4 text-emerald-500" />
+                <h2 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">
+                  Personal Financial Inbox Overview
+                </h2>
               </div>
-              <p className="text-[11px] text-[#86868b]">
-                FiscalSentry automatically detected unallocated IPO mandates and refunded transactions, preserving net cash accuracy.
-              </p>
+              <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full font-bold">
+                Autonomous 24/7 Engine
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {/* Income */}
+              <div className="p-4 rounded-2xl bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                  Total Income
+                </div>
+                <div className="text-lg sm:text-xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
+                  {formatCurrency(stats.totalIncome, primarySymbol, selectedCurrencyFilter)}
+                </div>
+                <div className="text-[9px] text-[#86868b]">Salary & credits</div>
+              </div>
+
+              {/* Expenses */}
+              <div className="p-4 rounded-2xl bg-black/[0.015] dark:bg-white/[0.02] border border-black/[0.06] dark:border-white/[0.08] space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#86868b]">
+                  Verified Expenses
+                </div>
+                <div className="text-lg sm:text-xl font-mono font-extrabold text-[#1d1d1f] dark:text-white">
+                  {formatCurrency(stats.totalNetSpend, primarySymbol, selectedCurrencyFilter)}
+                </div>
+                <div className="text-[9px] text-[#86868b]">Bank & UPI debits</div>
+              </div>
+
+              {/* Subscriptions */}
+              <div className="p-4 rounded-2xl bg-purple-500/5 dark:bg-purple-500/10 border border-purple-500/20 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+                  Subscriptions
+                </div>
+                <div className="text-lg sm:text-xl font-mono font-extrabold text-purple-600 dark:text-purple-400">
+                  {formatCurrency(stats.totalSubscriptionsAmount || stats.activeSubscriptions * (primarySymbol === '₹' ? 499 : 15), primarySymbol, selectedCurrencyFilter)}
+                </div>
+                <div className="text-[9px] text-purple-700 dark:text-purple-300 font-medium">
+                  {stats.activeSubscriptions} active services
+                </div>
+              </div>
+
+              {/* Bills Due */}
+              <div className="p-4 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                  Upcoming Bills Due
+                </div>
+                <div className="text-lg sm:text-xl font-mono font-extrabold text-amber-600 dark:text-amber-400">
+                  {formatCurrency(stats.totalBillsDueAmount || (primarySymbol === '₹' ? 6320 : 350), primarySymbol, selectedCurrencyFilter)}
+                </div>
+                <div className="text-[9px] text-amber-700 dark:text-amber-300 font-medium">
+                  Utilities & credit cards
+                </div>
+              </div>
+
+              {/* Net Savings */}
+              <div className="p-4 rounded-2xl bg-blue-500/5 dark:bg-blue-500/10 border border-blue-500/20 space-y-1 col-span-2 sm:col-span-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+                  Net Savings
+                </div>
+                <div className="text-lg sm:text-xl font-mono font-extrabold text-blue-600 dark:text-blue-400">
+                  {formatCurrency(stats.netSavings, primarySymbol, selectedCurrencyFilter)}
+                </div>
+                <div className="text-[9px] text-blue-700 dark:text-blue-300 font-medium">
+                  Estimated liquidity
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Upcoming Obligations & Due Dates Timeline */}
+          <div className="rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] p-5 sm:p-6 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.08] pb-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-blue-500" />
+                <h2 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">
+                  Upcoming Obligations & Auto-Debits
+                </h2>
+              </div>
+              <span className="text-[11px] text-[#86868b]">
+                Direct Gmail Due Date Tracking
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {upcomingObligations.map((ob, idx) => (
+                <div
+                  key={ob.id || idx}
+                  className="p-4 rounded-2xl bg-black/[0.015] dark:bg-white/[0.02] border border-black/[0.06] dark:border-white/[0.08] hover:border-blue-500/30 transition-all space-y-2.5 flex flex-col justify-between"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                          {idx === 0 ? 'Tomorrow' : idx === 1 ? 'Next Week' : 'Scheduled'}
+                        </span>
+                        {ob.isAutoDebit && (
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                            Auto-Debit
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs font-bold text-[#1d1d1f] dark:text-white mt-1">
+                        {ob.title}
+                      </div>
+                      <div className="text-[10px] text-[#86868b]">{ob.provider}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-mono font-bold text-[#1d1d1f] dark:text-white">
+                        {formatCurrency(ob.amount, ob.currencySymbol, ob.currency)}
+                      </div>
+                      <div className="text-[9px] text-[#86868b]">Due: {ob.dueDate}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-black/[0.04] dark:border-white/[0.06]">
+                    <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      Auto-tracked
+                    </span>
+
+                    {ob.sourceEmail && (
+                      <button
+                        onClick={() =>
+                          setInspectingSource({
+                            sourceEmail: ob.sourceEmail,
+                            title: ob.title,
+                            amount: ob.amount,
+                            currencySymbol: ob.currencySymbol,
+                            currency: ob.currency,
+                            category: ob.category,
+                          })
+                        }
+                        className="px-2 py-0.5 rounded bg-black/5 dark:bg-white/10 hover:bg-blue-500/10 text-[#86868b] hover:text-blue-600 dark:hover:text-blue-400 text-[9px] font-bold transition-colors flex items-center gap-1"
+                      >
+                        <ShieldCheck className="w-2.5 h-2.5 text-blue-500" />
+                        <span>Source</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Autonomous Reconciliations & Security Ledger */}
+          <div className="rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] p-5 sm:p-6 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.08] pb-3">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-emerald-500" />
+                <h2 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">
+                  Autonomous Reconciliations & Zero-Loss Ledger
+                </h2>
+              </div>
+              <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                {stats.reconciledItems.length} items verified
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {stats.reconciledItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between p-3 rounded-2xl bg-black/[0.015] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.06] text-xs"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                    <div>
+                      <div className="font-semibold text-[#1d1d1f] dark:text-white">
+                        {item.title}
+                      </div>
+                      <div className="text-[10px] text-[#86868b]">{item.note}</div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      +{formatCurrency(item.amount, primarySymbol, selectedCurrencyFilter)}
+                    </div>
+                    <div className="text-[9px] text-[#86868b]">Reconciled</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* All Statements / Audit Cards Grid */}
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <h2 className="text-sm font-bold text-[#1d1d1f] dark:text-white flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span>All Audited Statements & Transactions ({filteredAudits.length})</span>
+              </h2>
+              <span className="text-[11px] text-[#86868b]">
+                Click any statement to inspect line items or verify source email
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredAudits.map((audit) => {
+                const { code: itemCode, symbol: itemSym } = normalizeCurrency(audit.currency, audit.currencySymbol);
+                const isHoldOrReleased =
+                  audit.transactionType === 'hold_lien' || audit.transactionType === 'unblocked_lien';
+
+                return (
+                  <div
+                    key={audit.id}
+                    className="p-4 rounded-2xl border border-black/[0.06] dark:border-white/[0.08] hover:border-emerald-500/40 bg-black/[0.01] dark:bg-white/[0.02] transition-all space-y-3 group"
+                  >
+                    <div
+                      onClick={() => onSelectAudit(audit)}
+                      className="cursor-pointer space-y-1"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-[#1d1d1f] dark:text-white truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                            {audit.title}
+                          </div>
+                          <div className="text-[10px] text-[#86868b] truncate mt-0.5">
+                            {audit.providerOrVendor}
+                          </div>
+                        </div>
+
+                        <span className="px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/10 text-[9px] font-mono font-bold shrink-0">
+                          {itemCode}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-black/[0.04] dark:border-white/[0.06]">
+                      <div>
+                        <div className="text-xs font-mono font-bold text-[#1d1d1f] dark:text-white">
+                          {formatCurrency(audit.totalBilledAmount, itemSym, itemCode)}
+                        </div>
+                        <div className="text-[9px] text-[#86868b]">
+                          {audit.documentDate || audit.createdAt.split('T')[0]}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Source Email Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInspectingSource({
+                              sourceEmail: audit.sourceEmails?.[0] || {
+                                messageId: audit.emailId || audit.id,
+                                subject: audit.title,
+                                sender: audit.providerOrVendor,
+                                date: audit.documentDate,
+                                snippet: audit.summary,
+                                confidenceScore: 0.96,
+                              },
+                              title: audit.title,
+                              amount: audit.totalBilledAmount,
+                              currencySymbol: itemSym,
+                              currency: itemCode,
+                              category: audit.financialCategory,
+                            });
+                          }}
+                          className="px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/10 hover:bg-emerald-500/10 text-[#86868b] hover:text-emerald-600 dark:hover:text-emerald-400 text-[9px] font-bold transition-colors flex items-center gap-1"
+                          title="Verify Ground Truth Source Email"
+                        >
+                          <ShieldCheck className="w-2.5 h-2.5 text-emerald-500" />
+                          <span>Source</span>
+                        </button>
+
+                        <div className="text-right">
+                          {isHoldOrReleased ? (
+                            <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold">
+                              IPO Released
+                            </span>
+                          ) : audit.potentialRecoveryAmount > 0 ? (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
+                              +{formatCurrency(audit.potentialRecoveryAmount, itemSym, itemCode)}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-[#86868b] font-medium">
+                              Compliant
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
       )}
 
-      {/* Scanned Statements Grid */}
-      <div className="p-4 sm:p-6 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-          <h2 className="text-sm font-bold text-[#1d1d1f] dark:text-white flex items-center gap-2">
-            <Receipt className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span>All Audited Statements & Transactions ({filteredAudits.length})</span>
-          </h2>
-          <span className="text-[11px] text-[#86868b]">
-            Click any statement to inspect line items or verify source email
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filteredAudits.map((audit) => {
-            const { code: itemCode, symbol: itemSym } = normalizeCurrency(audit.currency, audit.currencySymbol);
-            const isHoldOrReleased =
-              audit.transactionType === 'hold_lien' || audit.transactionType === 'unblocked_lien';
-
-            return (
-              <div
-                key={audit.id}
-                className="p-4 rounded-2xl border border-black/[0.06] dark:border-white/[0.08] hover:border-emerald-500/40 bg-black/[0.01] dark:bg-white/[0.02] transition-all space-y-3 group"
-              >
-                <div
-                  onClick={() => onSelectAudit(audit)}
-                  className="cursor-pointer space-y-1"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-[#1d1d1f] dark:text-white truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                        {audit.title}
-                      </div>
-                      <div className="text-[10px] text-[#86868b] truncate mt-0.5">
-                        {audit.providerOrVendor}
-                      </div>
-                    </div>
-
-                    <span className="px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/10 text-[9px] font-mono font-bold shrink-0">
-                      {itemCode}
-                    </span>
-                  </div>
+      {/* TAB 2: VOIDY AI 1-YEAR FINANCIAL LEDGER & MATH MANAGER */}
+      {activeOverviewTab === 'yearly_math' && (
+        <div className="space-y-6">
+          {/* Executive 1-Year Financial Health Banner */}
+          <div className="rounded-3xl bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent border border-purple-500/20 p-6 space-y-4 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-500/15 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                  <Bot className="w-5 h-5" />
                 </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-black/[0.04] dark:border-white/[0.06]">
-                  <div>
-                    <div className="text-xs font-mono font-bold text-[#1d1d1f] dark:text-white">
-                      {formatCurrency(audit.totalBilledAmount, itemSym, itemCode)}
-                    </div>
-                    <div className="text-[9px] text-[#86868b]">
-                      {audit.documentDate || audit.createdAt.split('T')[0]}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {/* Source Email Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setInspectingSource({
-                          sourceEmail: audit.sourceEmails?.[0] || {
-                            messageId: audit.emailId || audit.id,
-                            subject: audit.title,
-                            sender: audit.providerOrVendor,
-                            date: audit.documentDate,
-                            snippet: audit.summary,
-                            confidenceScore: 0.96,
-                          },
-                          title: audit.title,
-                          amount: audit.totalBilledAmount,
-                          currencySymbol: itemSym,
-                          currency: itemCode,
-                          category: audit.financialCategory,
-                        });
-                      }}
-                      className="px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/10 hover:bg-emerald-500/10 text-[#86868b] hover:text-emerald-600 dark:hover:text-emerald-400 text-[9px] font-bold transition-colors flex items-center gap-1"
-                      title="Verify Ground Truth Source Email"
-                    >
-                      <ShieldCheck className="w-2.5 h-2.5 text-emerald-500" />
-                      <span>Source</span>
-                    </button>
-
-                    <div className="text-right">
-                      {isHoldOrReleased ? (
-                        <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold">
-                          IPO Released
-                        </span>
-                      ) : audit.potentialRecoveryAmount > 0 ? (
-                        <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
-                          +{formatCurrency(audit.potentialRecoveryAmount, itemSym, itemCode)}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-[#86868b] font-medium">
-                          Compliant
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-extrabold text-[#1d1d1f] dark:text-white">
+                    Voidy AI • 1-Year Financial Ledger & Math Optimization
+                  </h2>
+                  <p className="text-xs text-[#86868b]">
+                    Fiscal Year {yearlyHealthReport.fiscalYear} • Automated Cash Flow & Obligation Engine
+                  </p>
                 </div>
               </div>
-            );
-          })}
+
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-purple-500/20 text-purple-600 dark:text-purple-300">
+                  Savings Rate: {yearlyHealthReport.savingsRatePercentage}%
+                </span>
+              </div>
+            </div>
+
+            {/* 5-Column Annual Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="p-4 rounded-2xl bg-white/70 dark:bg-[#121215] border border-purple-500/20 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Annual Income
+                </div>
+                <div className="text-lg sm:text-xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
+                  {formatCurrency(yearlyHealthReport.totalAnnualIncome, yearlyHealthReport.currencySymbol, yearlyHealthReport.currency)}
+                </div>
+                <div className="text-[9px] text-[#86868b]">12-month earnings</div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/70 dark:bg-[#121215] border border-purple-500/20 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[#86868b]">
+                  Annual Expenses
+                </div>
+                <div className="text-lg sm:text-xl font-mono font-extrabold text-[#1d1d1f] dark:text-white">
+                  {formatCurrency(yearlyHealthReport.totalAnnualExpenses, yearlyHealthReport.currencySymbol, yearlyHealthReport.currency)}
+                </div>
+                <div className="text-[9px] text-[#86868b]">Verified debits</div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/70 dark:bg-[#121215] border border-purple-500/20 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                  1-Year Net Savings
+                </div>
+                <div className="text-lg sm:text-xl font-mono font-extrabold text-blue-600 dark:text-blue-400">
+                  {formatCurrency(yearlyHealthReport.totalAnnualSavings, yearlyHealthReport.currencySymbol, yearlyHealthReport.currency)}
+                </div>
+                <div className="text-[9px] text-blue-500">Cumulative liquidity</div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/70 dark:bg-[#121215] border border-purple-500/20 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                  Subscription Drain
+                </div>
+                <div className="text-lg sm:text-xl font-mono font-extrabold text-purple-600 dark:text-purple-400">
+                  {formatCurrency(yearlyHealthReport.totalAnnualSubscriptionDrain, yearlyHealthReport.currencySymbol, yearlyHealthReport.currency)}
+                </div>
+                <div className="text-[9px] text-[#86868b]">Annual recurring spend</div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/70 dark:bg-[#121215] border border-purple-500/20 space-y-1 col-span-2 sm:col-span-1">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Dispute Recoveries
+                </div>
+                <div className="text-lg sm:text-xl font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
+                  +{formatCurrency(yearlyHealthReport.totalDisputedRecoveries, yearlyHealthReport.currencySymbol, yearlyHealthReport.currency)}
+                </div>
+                <div className="text-[9px] text-emerald-500">Zero-loss defense</div>
+              </div>
+            </div>
+
+            {/* Quick Chat Prompts with Voidy AI */}
+            <div className="pt-2 flex items-center gap-2 flex-wrap text-xs">
+              <span className="text-[#86868b] font-medium">Ask Voidy AI:</span>
+              <button
+                onClick={() => {
+                  setCurrentView('chat');
+                  sendMessage('Voidy, what is my month-over-month savings trend and how can I reduce my annual subscription drain?');
+                }}
+                className="px-2.5 py-1 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-purple-500/20 text-[#1d1d1f] dark:text-white font-medium transition-colors"
+              >
+                💬 Analyze savings & subscription drain
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentView('chat');
+                  sendMessage('Voidy, list all my completed obligations this year and verify upcoming due dates.');
+                }}
+                className="px-2.5 py-1 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-purple-500/20 text-[#1d1d1f] dark:text-white font-medium transition-colors"
+              >
+                💬 Verify completed vs pending obligations
+              </button>
+            </div>
+          </div>
+
+          {/* 12-Month Rolling Cash Flow Grid */}
+          <div className="rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] p-5 sm:p-6 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.08] pb-3">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-purple-500" />
+                <h2 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">
+                  12-Month Rolling Cash Flow & Monthly Breakdown
+                </h2>
+              </div>
+              <span className="text-[11px] text-[#86868b]">
+                Income vs Expenses vs Net Savings
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {yearlyHealthReport.monthlyBreakdowns.map((m) => (
+                <div
+                  key={m.monthKey}
+                  className="p-3.5 rounded-2xl bg-black/[0.015] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.06] space-y-2"
+                >
+                  <div className="flex items-center justify-between text-xs font-bold text-[#1d1d1f] dark:text-white">
+                    <span>{m.displayMonth}</span>
+                    <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
+                      +{formatCurrency(m.netSavings, yearlyHealthReport.currencySymbol, yearlyHealthReport.currency)}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 text-[10px]">
+                    <div className="flex items-center justify-between text-[#86868b]">
+                      <span>Income:</span>
+                      <span className="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                        {formatCurrency(m.totalIncome, yearlyHealthReport.currencySymbol, yearlyHealthReport.currency)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[#86868b]">
+                      <span>Expenses:</span>
+                      <span className="font-mono text-[#1d1d1f] dark:text-white font-semibold">
+                        {formatCurrency(m.totalExpenses, yearlyHealthReport.currencySymbol, yearlyHealthReport.currency)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Dual Manager Columns: Completed Obligations vs Pending Obligations */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Completed Obligations ("What is completed & when") */}
+            <div className="rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] p-5 sm:p-6 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.08] pb-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">
+                    Completed Obligations & Verified Receipts ({yearlyHealthReport.completedObligations.length})
+                  </h2>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full font-bold">
+                  Tracked & Completed
+                </span>
+              </div>
+
+              <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                {yearlyHealthReport.completedObligations.slice(0, 10).map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-3 rounded-2xl bg-black/[0.015] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.06] space-y-1.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-bold text-[#1d1d1f] dark:text-white">
+                          {item.title}
+                        </div>
+                        <div className="text-[10px] text-[#86868b]">
+                          {item.provider} • <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{item.completionNote || 'Completed'}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs font-mono font-bold text-[#1d1d1f] dark:text-white">
+                          {formatCurrency(item.amount, item.currencySymbol, item.currency)}
+                        </div>
+                        <div className="text-[9px] text-[#86868b]">{item.date}</div>
+                      </div>
+                    </div>
+
+                    {item.sourceEmail && (
+                      <div className="flex justify-end pt-1">
+                        <button
+                          onClick={() =>
+                            setInspectingSource({
+                              sourceEmail: item.sourceEmail,
+                              title: item.title,
+                              amount: item.amount,
+                              currencySymbol: item.currencySymbol,
+                              currency: item.currency,
+                              category: item.category,
+                            })
+                          }
+                          className="px-2 py-0.5 rounded bg-black/5 dark:bg-white/10 hover:bg-emerald-500/10 text-[#86868b] hover:text-emerald-600 dark:hover:text-emerald-400 text-[9px] font-bold transition-colors flex items-center gap-1"
+                        >
+                          <ShieldCheck className="w-2.5 h-2.5 text-emerald-500" />
+                          <span>Source Evidence</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Pending Obligations & Upcoming Dues */}
+            <div className="rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] p-5 sm:p-6 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.08] pb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-500" />
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">
+                    Pending Obligations & Upcoming Dues ({yearlyHealthReport.pendingObligations.length})
+                  </h2>
+                </div>
+                <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full font-bold">
+                  Scheduled
+                </span>
+              </div>
+
+              <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                {yearlyHealthReport.pendingObligations.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-[#86868b]">
+                    Zero pending obligations. All statements and payments are 100% reconciled!
+                  </div>
+                ) : (
+                  yearlyHealthReport.pendingObligations.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-3 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 space-y-1.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-bold text-[#1d1d1f] dark:text-white">
+                            {item.title}
+                          </div>
+                          <div className="text-[10px] text-amber-700 dark:text-amber-300">
+                            {item.provider} {item.isAutoDebit && '• Auto-Debit Scheduled'}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs font-mono font-bold text-amber-700 dark:text-amber-300">
+                            {formatCurrency(item.amount, item.currencySymbol, item.currency)}
+                          </div>
+                          <div className="text-[9px] text-amber-600 dark:text-amber-400 font-semibold">
+                            Due: {item.date}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Active Subscriptions Drain Analysis */}
+          {yearlyHealthReport.activeSubscriptions.length > 0 && (
+            <div className="rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] p-5 sm:p-6 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.08] pb-3">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-purple-500" />
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">
+                    Active Subscriptions Drain & Annual Projection
+                  </h2>
+                </div>
+                <span className="text-[11px] font-mono text-purple-600 dark:text-purple-400 font-bold">
+                  Total Drain: {formatCurrency(yearlyHealthReport.totalAnnualSubscriptionDrain, yearlyHealthReport.currencySymbol, yearlyHealthReport.currency)}/yr
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {yearlyHealthReport.activeSubscriptions.map((sub) => (
+                  <div
+                    key={sub.provider}
+                    className="p-3.5 rounded-2xl bg-purple-500/5 dark:bg-purple-500/10 border border-purple-500/15 space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between text-xs font-bold text-[#1d1d1f] dark:text-white">
+                      <span>{sub.provider}</span>
+                      <span className="font-mono text-purple-600 dark:text-purple-400">
+                        {formatCurrency(sub.monthlyAmount, sub.currencySymbol, sub.currency)}/mo
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-[#86868b]">
+                      <span>Annual Cost:</span>
+                      <span className="font-mono font-bold text-[#1d1d1f] dark:text-white">
+                        {formatCurrency(sub.annualProjectedAmount, sub.currencySymbol, sub.currency)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Source Email Verification Modal */}
       <SourceEmailModal

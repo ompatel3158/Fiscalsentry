@@ -184,10 +184,10 @@ export function SettingsView() {
             </button>
 
             <button
-              onClick={() => triggerManualSentryScan(undefined, 10)}
+              onClick={() => triggerManualSentryScan(undefined, 'month')}
               className="px-3.5 py-2 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-[#1d1d1f] dark:text-white text-xs font-bold transition-all active:scale-[0.97]"
             >
-              Scan Last 10 Days
+              Scan Current Month (30d)
             </button>
           </div>
         </div>

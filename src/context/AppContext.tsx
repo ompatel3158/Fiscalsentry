@@ -14,8 +14,16 @@ import {
   saveUserAuditToFirestore,
   getUserAuditsFromFirestore,
 } from '@/lib/firebase';
-import { fetchFinancialEmailsFromGmail, extractBankTransactionFromText, isPromotionalOrMarketingEmail } from '@/lib/gmail';
+import {
+  fetchFinancialEmailsFromGmail,
+  fetchFinancialEmailsTiered,
+  SyncTier,
+  extractBankTransactionFromText,
+  isPromotionalOrMarketingEmail,
+} from '@/lib/gmail';
 import { auditFinancialDocument, auditBatchFinancialEmails } from '@/lib/gemini';
+import { computeYearlyFinancialLedger, YearlyFinancialHealthReport } from '@/lib/financialManager';
+import { encryptSensitiveText, decryptSensitiveText } from '@/lib/encryption';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 
@@ -25,6 +33,7 @@ interface AppContextType {
   allAudits: AuditResult[];
   activeAudit: AuditResult | null;
   setActiveAudit: (audit: AuditResult | null) => void;
+  yearlyHealthReport: YearlyFinancialHealthReport;
   isSandboxDemoActive: boolean;
   loadTemporarySandboxData: () => void;
   clearSandboxData: () => void;
@@ -41,7 +50,7 @@ interface AppContextType {
   setIsIntegrationsModalOpen: (open: boolean) => void;
   executeAction: (action: ActionItemPayload) => Promise<void>;
   executeAllPendingActions: (auditId: string) => Promise<void>;
-  triggerManualSentryScan: (customAccessToken?: string, daysLookback?: number, isSilent?: boolean) => Promise<void>;
+  triggerManualSentryScan: (customAccessToken?: string, tier?: SyncTier, isSilent?: boolean) => Promise<void>;
   loadPresetAudit: (presetKey: string) => void;
   addNewAudit: (audit: AuditResult) => void;
 }
@@ -195,7 +204,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('fs_last_poll_timestamp', Date.now().toString());
       }
       console.log('[Sentry] Performing first-time historical inbox scan...');
-      triggerManualSentryScan(token, 15);
+      triggerManualSentryScan(token, 'delta');
     }
   }, [googleAccessToken, userProfile?.googleAccessToken, isSandboxDemoActive]);
 
@@ -244,7 +253,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (typeof window !== 'undefined') {
           localStorage.setItem('fs_last_poll_timestamp', now.toString());
         }
-        await triggerManualSentryScan(token, 15, true);
+        await triggerManualSentryScan(token, 'delta', true);
       }
     };
 
@@ -462,14 +471,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (_) {}
   };
 
-  // Comprehensive Batch Sentry Scan (Audits all genuine financial emails from the last N days)
+  const yearlyHealthReport = React.useMemo(() => {
+    return computeYearlyFinancialLedger(allAudits);
+  }, [allAudits]);
+
+  // Comprehensive Batch Sentry Scan with Tiered Checkpointing (Delta, Month, Quarter, Year)
   const triggerManualSentryScan = async (
     customAccessToken?: string,
-    daysLookback: number = 15,
+    tier: SyncTier = 'delta',
     isSilent: boolean = false
   ) => {
+    const tierLabel =
+      tier === 'delta' ? 'Quick Delta' : tier === 'month' ? 'Current Month (30d)' : tier === 'year' ? '1-Year Ledger Optimization (365d)' : 'Quarterly (90d)';
+    
     if (!isSilent) {
-      toast.loading(`Autonomous Sentry scanning Gmail inbox (last ${daysLookback} days)...`, { id: 'sentry-scan' });
+      toast.loading(`Voidy AI scanning Gmail inbox (${tierLabel})...`, { id: 'sentry-scan' });
     }
 
     try {
@@ -504,50 +520,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         lastPolledAt: new Date().toISOString(),
       }));
 
+      const lastPollTimestamp =
+        typeof window !== 'undefined'
+          ? parseInt(localStorage.getItem('fs_last_poll_timestamp') || '0', 10)
+          : 0;
+
       if (typeof window !== 'undefined') {
         localStorage.setItem('fs_last_poll_timestamp', Date.now().toString());
       }
 
-      // Direct client-side batch Gmail REST API query
+      // Direct client-side batch Gmail REST API query using Tiered Checkpointing
       if (activeToken && !isSandboxDemoActive) {
         try {
-          const realEmails = await fetchFinancialEmailsFromGmail(activeToken, 50, daysLookback);
+          // Retrieve previously processed email IDs from localStorage
+          let storedAuditedIds: string[] = [];
+          if (typeof window !== 'undefined') {
+            try {
+              const raw = localStorage.getItem('fs_audited_email_ids');
+              if (raw) storedAuditedIds = JSON.parse(raw);
+            } catch (_) {}
+          }
+
+          const allAuditedEmailIds = new Set<string>([
+            ...storedAuditedIds,
+            ...allAudits.flatMap((a) => (a.emailIds || (a.emailId ? [a.emailId] : []))),
+          ]);
+
+          const realEmails = await fetchFinancialEmailsTiered(
+            activeToken,
+            tier,
+            lastPollTimestamp,
+            Array.from(allAuditedEmailIds)
+          );
 
           if (realEmails.length > 0) {
-            // Get cached list from localStorage and state
-            let existingAudits = allAudits;
-            if (typeof window !== 'undefined') {
-              try {
-                const cachedStr = localStorage.getItem('fs_cached_audits');
-                if (cachedStr) {
-                  const cachedList: AuditResult[] = JSON.parse(cachedStr);
-                  if (Array.isArray(cachedList) && cachedList.length > existingAudits.length) {
-                    existingAudits = cachedList;
-                  }
-                }
-              } catch (_) {}
-            }
-
-            // Retrieve previously processed email IDs from localStorage
-            let storedAuditedIds: string[] = [];
-            if (typeof window !== 'undefined') {
-              try {
-                const raw = localStorage.getItem('fs_audited_email_ids');
-                if (raw) storedAuditedIds = JSON.parse(raw);
-              } catch (_) {}
-            }
-
-            const allAuditedEmailIds = new Set<string>([
-              ...storedAuditedIds,
-              ...existingAudits.flatMap((a) => (a.emailIds || (a.emailId ? [a.emailId] : []))),
-            ]);
-
-            // Filter out emails that have already been audited
+            // Filter out obvious promotional non-financial messages
             const unAuditedEmails = realEmails.filter((email) => {
-              if (allAuditedEmailIds.has(email.id)) {
-                return false;
-              }
-              // Skip obvious promotional non-financial messages
               if (isPromotionalOrMarketingEmail(email.subject, email.snippet, email.sender, email.bodyText)) {
                 return false;
               }
@@ -558,7 +566,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               if (!isSilent) {
                 toast.success('Gmail Scan Complete', {
                   id: 'sentry-scan',
-                  description: `All ${realEmails.length} statements from the last ${daysLookback} days are already audited and cached.`,
+                  description: `Checked ${realEmails.length} messages (${tierLabel}). Zero liabilities or new charges found.`,
                 });
               }
               setSentryLogs((prev) => [
@@ -567,7 +575,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   timestamp: new Date().toLocaleTimeString(),
                   source: 'gmail',
                   status: 'success',
-                  message: `Sentry Verified: ${realEmails.length} messages checked. Inbox is 100% up to date.`,
+                  message: `Voidy AI Verified: ${realEmails.length} messages checked (${tierLabel}). Ledger is 100% up to date.`,
                 },
                 ...prev.slice(0, 15),
               ]);
@@ -575,7 +583,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
 
             if (!isSilent) {
-              toast.loading(`Evaluating ${unAuditedEmails.length} new messages in 1 Gemini batch...`, {
+              toast.loading(`Voidy AI evaluating ${unAuditedEmails.length} new transactions in 1 Gemini batch...`, {
                 id: 'sentry-scan',
               });
             }
@@ -626,14 +634,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   timestamp: new Date().toLocaleTimeString(),
                   source: 'gmail',
                   status: 'success',
-                  message: `1-Shot Batch Sentry: Audited ${unAuditedEmails.length} emails into 1 consolidated digest (${transactionCount} transactions).`,
+                  message: `Voidy AI Batch Sentry: Audited ${unAuditedEmails.length} emails into 1 consolidated digest (${transactionCount} transactions).`,
                 },
                 ...prev.slice(0, 15),
               ]);
 
-              toast.success('Autonomous Sentry 1-Shot Ingestion Complete!', {
+              toast.success('Voidy AI Financial Ingestion Complete!', {
                 id: 'sentry-scan',
-                description: `Processed ${unAuditedEmails.length} emails in 1 Gemini call (${transactionCount} verified transactions added).`,
+                description: `Processed ${unAuditedEmails.length} emails (${transactionCount} verified transactions synchronized).`,
               });
             } else {
               setSentryLogs((prev) => [
@@ -657,9 +665,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return;
           } else {
             if (!isSilent) {
-              toast.info('No Statements Found', {
+              toast.info('Inbox Up to Date', {
                 id: 'sentry-scan',
-                description: `No new messages found in the last ${daysLookback} days.`,
+                description: `Zero new messages since your last sync (${tierLabel}).`,
               });
             }
             return;
@@ -671,7 +679,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               toast.loading('Google Workspace Token Expired. Refreshing authorization...', { id: 'sentry-scan' });
               const freshToken = await connectGoogleWorkspace();
               if (freshToken) {
-                return await triggerManualSentryScan(freshToken, daysLookback, isSilent);
+                return await triggerManualSentryScan(freshToken, tier, isSilent);
               } else {
                 toast.error('Google Workspace Authorization Expired', {
                   id: 'sentry-scan',
@@ -679,18 +687,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 });
                 return;
               }
-            } else {
-              setSentryLogs((prev) => [
-                {
-                  id: 'log-' + Date.now(),
-                  timestamp: new Date().toLocaleTimeString(),
-                  source: 'gmail',
-                  status: 'error',
-                  message: 'Google Workspace token expired. Click Scan Now to re-authorize.',
-                },
-                ...prev.slice(0, 15),
-              ]);
-              return;
             }
           }
           console.warn('[Sentry] Gmail extraction issue:', gmailErr);
@@ -718,6 +714,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         allAudits,
         activeAudit,
         setActiveAudit,
+        yearlyHealthReport,
         isSandboxDemoActive,
         loadTemporarySandboxData,
         clearSandboxData,

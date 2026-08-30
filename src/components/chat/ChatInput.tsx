@@ -122,7 +122,7 @@ export function ChatInput() {
             placeholder={
               isRecording
                 ? '🎙️ Listening to voice memo...'
-                : 'Ask FiscalSentry to audit a bill, compare quotes, calculate grants, or prepare dispute letters...'
+                : 'Ask Voidy AI about your bills, 1-year cash flow, upcoming EMIs, subscriptions, or dispute letters...'
             }
             className="w-full bg-transparent px-3 py-1.5 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none resize-none max-h-40 leading-relaxed"
           />

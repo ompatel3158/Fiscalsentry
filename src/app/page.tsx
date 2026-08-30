@@ -372,7 +372,7 @@ export default function Home() {
                       setSelectedMonthKey(null);
                       setActiveAudit(audit);
                     }}
-                    onScanNow={() => triggerManualSentryScan(undefined, 15)}
+                    onScanNow={(tier) => triggerManualSentryScan(undefined, tier || 'delta')}
                     onLoadDemo={loadTemporarySandboxData}
                   />
                   <div className="max-w-2xl mx-auto pt-2">

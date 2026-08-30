@@ -183,6 +183,48 @@ export function extractBankTransactionFromText(text: string): {
   };
 }
 
+export type SyncTier = 'delta' | 'month' | 'quarter' | 'year';
+
+/**
+ * Tiered Checkpointed Gmail Ingestion Engine
+ * Pulls new delta emails, current month, or background 1-year historical ledger
+ * Excludes already audited message IDs and marketing promotions.
+ */
+export async function fetchFinancialEmailsTiered(
+  accessToken: string,
+  tier: SyncTier = 'delta',
+  lastSyncedTimestamp?: number,
+  existingAuditedIds: string[] = []
+): Promise<ExtractedEmail[]> {
+  let lookbackDays = 15;
+  let maxResults = 50;
+  let customQuery = '';
+
+  if (tier === 'delta') {
+    if (lastSyncedTimestamp && lastSyncedTimestamp > 0) {
+      const epochSeconds = Math.max(0, Math.floor(lastSyncedTimestamp / 1000) - 300); // 5 min buffer
+      customQuery = `-category:promotions -category:social -is:draft -is:spam after:${epochSeconds}`;
+    } else {
+      customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:2d`;
+    }
+    maxResults = 35;
+  } else if (tier === 'month') {
+    lookbackDays = 31;
+    maxResults = 60;
+    customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:31d`;
+  } else if (tier === 'quarter') {
+    lookbackDays = 90;
+    maxResults = 100;
+    customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:90d`;
+  } else if (tier === 'year') {
+    lookbackDays = 365;
+    maxResults = 150;
+    customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:365d`;
+  }
+
+  return fetchFinancialEmailsFromGmail(accessToken, maxResults, lookbackDays, customQuery, existingAuditedIds);
+}
+
 /**
  * Searches the user's Gmail for all genuine payments, bank alerts, debits, receipts, bills, and financial documents
  * Filters out marketing promotions, coupons, and solicitations.
@@ -190,15 +232,16 @@ export function extractBankTransactionFromText(text: string): {
 export async function fetchFinancialEmailsFromGmail(
   accessToken: string,
   maxResults: number = 50,
-  daysLookback: number = 15
+  daysLookback: number = 15,
+  explicitQuery?: string,
+  existingAuditedIds: string[] = []
 ): Promise<ExtractedEmail[]> {
   if (!accessToken) {
     throw new Error('GMAIL_AUTH_EXPIRED');
   }
 
-// 1. Broad query capturing all candidate emails across Inbox, Updates, Primary except Promotions/Social/Drafts
   const query = encodeURIComponent(
-    `-category:promotions -category:social -is:draft -is:spam newer_than:${daysLookback}d`
+    explicitQuery || `-category:promotions -category:social -is:draft -is:spam newer_than:${daysLookback}d`
   );
   const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=${maxResults}`;
 
@@ -284,8 +327,17 @@ export async function fetchFinancialEmailsFromGmail(
     return [];
   }
 
-  // 2. Fetch full message details in parallel
-  const emailPromises = messages.slice(0, maxResults).map(async (msg) => {
+  // 2. Filter out already processed emails if existingAuditedIds provided
+  const candidateMessages = existingAuditedIds.length > 0
+    ? messages.filter((m) => !existingAuditedIds.includes(m.id))
+    : messages;
+
+  if (candidateMessages.length === 0) {
+    return [];
+  }
+
+  // 3. Fetch full message details in parallel
+  const emailPromises = candidateMessages.slice(0, maxResults).map(async (msg) => {
     try {
       const detailUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`;
       const detailRes = await fetch(detailUrl, {

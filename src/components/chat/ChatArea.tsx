@@ -66,10 +66,10 @@ export function ChatArea() {
 
           <div className="min-w-0">
             <h2 className="text-xs sm:text-sm font-bold text-[#1d1d1f] dark:text-white truncate">
-              {activeSession?.title || 'Financial Intelligence Session'}
+              {activeSession?.title || 'Voidy AI • Financial Intelligence Manager'}
             </h2>
             <p className="text-[10px] text-[#86868b] truncate hidden sm:block font-mono">
-              {activeModel} • RAG Statutory Memory Active • Action Dispatcher
+              Voidy AI Executive Manager • {activeModel} • 1-Year Financial Ledger Active
             </p>
           </div>
         </div>
