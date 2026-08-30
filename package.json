@@ -9,12 +9,14 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@genkit-ai/googleai": "^1.28.0",
     "@google/genai": "^2.18.0",
     "@google/generative-ai": "^0.24.1",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "firebase": "^11.3.1",
     "framer-motion": "^11.18.2",
+    "genkit": "^1.41.0",
     "jspdf": "^2.5.2",
     "lucide-react": "^0.475.0",
     "next": "^14.2.24",
@@ -23,7 +25,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "sonner": "^2.0.1",
-    "tailwind-merge": "^3.0.1"
+    "tailwind-merge": "^3.0.1",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",
