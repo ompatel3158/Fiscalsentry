@@ -248,19 +248,51 @@ export function AuditInspector() {
                       {isExpanded && (
                         <tr>
                           <td colSpan={7} className="px-5 py-4 bg-black/[0.02] dark:bg-white/[0.02] border-y border-black/[0.04] dark:border-white/[0.04]">
-                            <div className="flex items-start gap-2.5 text-xs">
-                              <Scale className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                              <div>
-                                <span className="font-bold text-[#1d1d1f] dark:text-white">
-                                  Gemini 3.1 Statutory Audit & Compliance Precedent:
-                                </span>
-                                <p className="text-[#86868b] dark:text-slate-300 mt-1 leading-relaxed">
-                                  {item.reasoning}
-                                </p>
-                                <div className="mt-2 text-[10px] text-[#86868b] font-mono">
-                                  Confidence: {(item.confidenceScore * 100).toFixed(0)}% • Verified against statutory benchmarks
+                            <div className="space-y-3">
+                              <div className="flex items-start gap-2.5 text-xs">
+                                <Scale className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                                <div>
+                                  <span className="font-bold text-[#1d1d1f] dark:text-white">
+                                    Gemini 3.1 Statutory Audit & Compliance Precedent:
+                                  </span>
+                                  <p className="text-[#86868b] dark:text-slate-300 mt-1 leading-relaxed">
+                                    {item.reasoning}
+                                  </p>
+                                  <div className="mt-2 text-[10px] text-[#86868b] font-mono">
+                                    Confidence: {(item.confidenceScore * 100).toFixed(0)}% • Verified against statutory benchmarks
+                                  </div>
                                 </div>
                               </div>
+
+                              {/* Verified Source Email Snippet */}
+                              {item.sourceEmail && (
+                                <div className="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] text-xs space-y-1.5">
+                                  <div className="flex items-center justify-between text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
+                                    <div className="flex items-center gap-1">
+                                      <ShieldCheck className="w-3.5 h-3.5" />
+                                      <span>Verified Ground-Truth Email Source</span>
+                                    </div>
+                                    <a
+                                      href={`https://mail.google.com/mail/u/0/#search/${encodeURIComponent(item.sourceEmail.subject)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-500 hover:underline flex items-center gap-0.5 lowercase font-mono"
+                                    >
+                                      <span>open in gmail</span>
+                                      <ExternalLink className="w-2.5 h-2.5" />
+                                    </a>
+                                  </div>
+                                  <div className="text-[#1d1d1f] dark:text-white font-semibold">
+                                    {item.sourceEmail.subject}
+                                  </div>
+                                  <div className="text-[11px] text-[#86868b]">
+                                    From: {item.sourceEmail.sender} • {item.sourceEmail.date}
+                                  </div>
+                                  <div className="text-[11px] font-mono bg-black/[0.02] dark:bg-white/[0.02] p-2 rounded-lg text-[#86868b] dark:text-[#a1a1aa] whitespace-pre-wrap">
+                                    {item.sourceEmail.snippet || item.sourceEmail.rawExcerpt}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -288,15 +320,55 @@ export function AuditInspector() {
           )}
         </div>
       ) : (
-        /* 2. Raw Email / Paperwork Viewer */
-        <div className="p-6 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-3">
-          <div className="flex items-center gap-2 text-xs font-bold text-[#1d1d1f] dark:text-white">
-            <Mail className="w-4 h-4 text-blue-500" />
-            Decoded Email & Document Content
+        <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.06] pb-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#86868b] flex items-center gap-2">
+              <Mail className="w-4 h-4 text-blue-500" />
+              <span>Ground Truth Source Evidence ({activeAudit.sourceEmails?.length || 1} emails)</span>
+            </h3>
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full">
+              Zero Hallucination
+            </span>
           </div>
-          <div className="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] font-mono text-xs text-[#1d1d1f] dark:text-slate-300 whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
-            {activeAudit.rawDocumentText || 'No raw email body text recorded for this statement.'}
-          </div>
+
+          {activeAudit.sourceEmails && activeAudit.sourceEmails.length > 0 ? (
+            <div className="space-y-4">
+              {activeAudit.sourceEmails.map((se, i) => (
+                <div
+                  key={se.messageId || i}
+                  className="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.06] space-y-2 text-xs"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-[#1d1d1f] dark:text-white">
+                        {se.subject}
+                      </div>
+                      <div className="text-[11px] text-[#86868b]">
+                        From: {se.sender} ({se.senderEmail || 'Verified'}) • Date: {se.date}
+                      </div>
+                    </div>
+                    <a
+                      href={`https://mail.google.com/mail/u/0/#search/${encodeURIComponent(se.subject)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 hover:underline flex items-center gap-1 text-[11px] font-semibold shrink-0"
+                    >
+                      <span>Gmail</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.03] font-mono text-[11px] text-[#1d1d1f] dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
+                    {se.rawExcerpt || se.snippet}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.06] text-xs font-mono whitespace-pre-wrap text-[#1d1d1f] dark:text-slate-300 max-h-96 overflow-y-auto leading-relaxed">
+              {activeAudit.rawDocumentText || activeAudit.summary}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -24,11 +24,49 @@ export type LineItemStatus =
   | 'negotiable'
   | 'rebate_eligible';
 
+export type FinancialCategory =
+  | 'utility_bill'
+  | 'bank_expense'
+  | 'income_salary'
+  | 'recurring_subscription'
+  | 'credit_card_statement'
+  | 'loan_emi'
+  | 'insurance'
+  | 'investment_ipo'
+  | 'other';
+
+export interface SourceEmailReference {
+  messageId: string;
+  threadId?: string;
+  subject: string;
+  sender: string;
+  senderEmail?: string;
+  date: string;
+  snippet: string;
+  rawExcerpt?: string;
+  confidenceScore?: number;
+}
+
+export interface UpcomingObligation {
+  id: string;
+  title: string;
+  amount: number;
+  currency: string;
+  currencySymbol: string;
+  dueDate: string; // YYYY-MM-DD
+  category: FinancialCategory;
+  provider: string;
+  isAutoDebit: boolean;
+  status: 'upcoming' | 'paid' | 'overdue';
+  sourceEmail?: SourceEmailReference;
+}
+
 export interface AuditLineItem {
   id: string;
   code?: string; // CPT, ICD-10, SKU, or Line Item Code
   description: string;
   category?: string;
+  financialCategory?: FinancialCategory;
   quantity?: number;
   originalAmount: number;
   benchmarkAmount: number; // Fair CMS/Medicare or standard market benchmark
@@ -37,6 +75,8 @@ export interface AuditLineItem {
   violationType?: string; // e.g., "No Surprises Act Sec. 102", "Unbundling of CPT 99214 & 99215"
   confidenceScore: number; // 0.0 - 1.0
   reasoning: string;
+  dueDate?: string;
+  sourceEmail?: SourceEmailReference;
 }
 
 export interface StatutoryCitation {
@@ -78,9 +118,11 @@ export interface AuditResult {
   id: string;
   title: string;
   category: DocumentCategory;
+  financialCategory?: FinancialCategory;
   providerOrVendor: string;
   accountNumber?: string;
   documentDate: string;
+  dueDate?: string;
   totalBilledAmount: number;
   fairBenchmarkAmount: number;
   potentialRecoveryAmount: number;
@@ -102,6 +144,7 @@ export interface AuditResult {
   rawDocumentText?: string;
   emailId?: string;
   emailIds?: string[];
+  sourceEmails?: SourceEmailReference[];
   createdAt: string;
   updatedAt: string;
 }

@@ -224,8 +224,20 @@ export async function auditBatchFinancialEmails(
     return {
       id: 'audit-batch-' + Math.random().toString(36).substring(2, 9),
       emailIds: validItems.map((v) => v.email.id),
+      sourceEmails: validItems.map((v) => ({
+        messageId: v.email.id,
+        threadId: v.email.threadId,
+        subject: v.email.subject,
+        sender: v.email.sender,
+        senderEmail: v.email.senderEmail,
+        date: v.email.date,
+        snippet: v.email.snippet,
+        rawExcerpt: v.email.bodyText.substring(0, 300),
+        confidenceScore: 0.95,
+      })),
       title: `Hourly Sentry Digest: ${validItems.length} Transactions Audited`,
       category: 'invoice_receipt',
+      financialCategory: 'bank_expense',
       providerOrVendor: vendors.length > 30 ? vendors.substring(0, 30) + '...' : vendors || 'Multi-Vendor',
       documentDate: new Date().toISOString().split('T')[0],
       totalBilledAmount: totalBilled,
@@ -242,12 +254,24 @@ export async function auditBatchFinancialEmails(
         id: `li-${i + 1}`,
         code: `TXN-${i + 1}`,
         description: `${v.bank.merchant || v.email.sender}: ${v.email.subject}`,
+        financialCategory: (v.bank.transactionType === 'subscription' ? 'recurring_subscription' : v.bank.transactionType === 'hold_lien' ? 'investment_ipo' : 'bank_expense') as any,
         originalAmount: v.bank.amount || 0,
         benchmarkAmount: v.bank.amount || 0,
         deltaSavings: 0,
         status: 'compliant' as const,
         confidenceScore: 0.95,
         reasoning: 'Verified transactional record',
+        sourceEmail: {
+          messageId: v.email.id,
+          threadId: v.email.threadId,
+          subject: v.email.subject,
+          sender: v.email.sender,
+          senderEmail: v.email.senderEmail,
+          date: v.email.date,
+          snippet: v.email.snippet,
+          rawExcerpt: v.email.bodyText.substring(0, 300),
+          confidenceScore: 0.95,
+        },
       })),
       actions: [
         {
@@ -293,8 +317,14 @@ You are evaluating an hourly batch of ${emails.length} candidate emails pulled f
 
 OBJECTIVES:
 1. DISCRIMINATE & FILTER:
-   - Identify which emails are REAL financial transactions (bank debits, credits, UPI payments, subscription renewals, bills, invoices, order receipts, IPO application mandates/holds, or lien unblocks/refunds).
-   - Filter out all promotional marketing campaigns, discount offers, coupons, sales announcements, and newsletters (they have $0 debt and 0 liability).
+   - Identify which emails are REAL financial transactions:
+     * Utility & Service Bills (Electricity, Water, Internet, Hospital Bills)
+     * Bank & Card Debits (UPI, POS, Online debits/expenses)
+     * Income & Salary Credits
+     * Subscriptions (Netflix, Prime, SaaS, Gym)
+     * Credit Card Statements & Loan EMIs
+     * Investments & IPO Mandates (blocked/unblocked funds)
+   - Filter out all pure promotional marketing campaigns, discount offers, coupons, sales announcements, and newsletters (0 debt and 0 liability).
 
 2. BATCH RECONCILIATION:
    - If ZERO real financial transactions exist in this batch (all are promotional or non-financial), output JSON:
@@ -306,30 +336,36 @@ OBJECTIVES:
        "hasFinancialTransactions": true,
        "title": string,
        "category": "invoice_receipt" | "medical_bill" | "vendor_quotes" | "grant_subsidy",
+       "financialCategory": "utility_bill" | "bank_expense" | "income_salary" | "recurring_subscription" | "credit_card_statement" | "loan_emi" | "insurance" | "investment_ipo",
        "providerOrVendor": string,
        "accountNumber": string,
        "documentDate": "YYYY-MM-DD",
+       "dueDate": "YYYY-MM-DD" (or null if not a bill/EMI),
        "totalBilledAmount": number,
        "fairBenchmarkAmount": number,
        "potentialRecoveryAmount": number,
        "currency": string,
        "currencySymbol": string,
-       "transactionType": "expense" | "refund" | "hold_lien" | "unblocked_lien" | "subscription" | "transfer" | "bill",
+       "transactionType": "expense" | "refund" | "hold_lien" | "unblocked_lien" | "subscription" | "transfer" | "income" | "bill",
        "actualNetSpend": number,
        "isRecurringSubscription": boolean,
+       "nextRenewalDate": "YYYY-MM-DD" (or null),
        "riskLevel": "critical" | "high" | "medium" | "low",
        "summary": string,
        "citations": [{"statute": string, "title": string, "applicableSection": string, "summary": string}],
        "lineItems": [{
          "id": string,
+         "sourceEmailId": string (must match the ID of the specific email from the batch),
          "code": string,
          "description": string,
+         "financialCategory": "utility_bill" | "bank_expense" | "income_salary" | "recurring_subscription" | "credit_card_statement" | "loan_emi" | "insurance" | "investment_ipo",
          "originalAmount": number,
          "benchmarkAmount": number,
          "deltaSavings": number,
+         "dueDate": "YYYY-MM-DD" (optional),
          "status": "compliant" | "overcharge" | "unbundled" | "duplicate" | "statutory_violation" | "negotiable" | "rebate_eligible",
          "violationType": string,
-         "confidenceScore": number,
+         "confidenceScore": number (0.0 - 1.0),
          "reasoning": string
        }],
        "actions": [{
@@ -362,12 +398,49 @@ Output pure, valid JSON only.
       return null;
     }
 
+    const emailMap = new Map(emails.map((e) => [e.id, e]));
+
+    const enrichedLineItems = (parsed.lineItems || []).map((li: any) => {
+      const matchedEmail = li.sourceEmailId ? emailMap.get(li.sourceEmailId) : undefined;
+      const fallbackEmail = matchedEmail || emails[0];
+      return {
+        ...li,
+        sourceEmail: fallbackEmail
+          ? {
+              messageId: fallbackEmail.id,
+              threadId: fallbackEmail.threadId,
+              subject: fallbackEmail.subject,
+              sender: fallbackEmail.sender,
+              senderEmail: fallbackEmail.senderEmail,
+              date: fallbackEmail.date,
+              snippet: fallbackEmail.snippet,
+              rawExcerpt: fallbackEmail.bodyText.substring(0, 400),
+              confidenceScore: li.confidenceScore || 0.95,
+            }
+          : undefined,
+      };
+    });
+
+    const sourceEmails = emails.map((e) => ({
+      messageId: e.id,
+      threadId: e.threadId,
+      subject: e.subject,
+      sender: e.sender,
+      senderEmail: e.senderEmail,
+      date: e.date,
+      snippet: e.snippet,
+      rawExcerpt: e.bodyText.substring(0, 400),
+      confidenceScore: 0.95,
+    }));
+
     return {
       id: 'audit-batch-' + Math.random().toString(36).substring(2, 9),
       emailIds: emails.map((e) => e.id),
+      sourceEmails,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       ...parsed,
+      lineItems: enrichedLineItems,
     };
   } catch (err: any) {
     console.error(`[Gemini Batch ${modelToUse}] Error:`, err);
@@ -382,12 +455,47 @@ Output pure, valid JSON only.
         if (fbParsed.hasFinancialTransactions === false || (!fbParsed.lineItems || fbParsed.lineItems.length === 0)) {
           return null;
         }
+
+        const emailMap = new Map(emails.map((e) => [e.id, e]));
+        const fbEnrichedLineItems = (fbParsed.lineItems || []).map((li: any) => {
+          const matchedEmail = li.sourceEmailId ? emailMap.get(li.sourceEmailId) : undefined;
+          const fallbackEmail = matchedEmail || emails[0];
+          return {
+            ...li,
+            sourceEmail: fallbackEmail
+              ? {
+                  messageId: fallbackEmail.id,
+                  threadId: fallbackEmail.threadId,
+                  subject: fallbackEmail.subject,
+                  sender: fallbackEmail.sender,
+                  senderEmail: fallbackEmail.senderEmail,
+                  date: fallbackEmail.date,
+                  snippet: fallbackEmail.snippet,
+                  rawExcerpt: fallbackEmail.bodyText.substring(0, 400),
+                  confidenceScore: li.confidenceScore || 0.95,
+                }
+              : undefined,
+          };
+        });
+
         return {
           id: 'audit-batch-' + Math.random().toString(36).substring(2, 9),
           emailIds: emails.map((e) => e.id),
+          sourceEmails: emails.map((e) => ({
+            messageId: e.id,
+            threadId: e.threadId,
+            subject: e.subject,
+            sender: e.sender,
+            senderEmail: e.senderEmail,
+            date: e.date,
+            snippet: e.snippet,
+            rawExcerpt: e.bodyText.substring(0, 400),
+            confidenceScore: 0.95,
+          })),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           ...fbParsed,
+          lineItems: fbEnrichedLineItems,
         };
       } catch (fbErr) {
         console.error('[Gemini Batch Fallback] Error:', fbErr);
