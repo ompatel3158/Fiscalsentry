@@ -196,9 +196,9 @@ export async function fetchFinancialEmailsFromGmail(
     throw new Error('GMAIL_AUTH_EXPIRED');
   }
 
-  // 1. Broad query capturing candidate emails across Inbox, Updates, and Primary
+// 1. Broad query capturing all candidate emails across Inbox, Updates, Primary except Promotions/Social/Drafts
   const query = encodeURIComponent(
-    `-category:social -is:draft -is:spam newer_than:${daysLookback}d`
+    `-category:promotions -category:social -is:draft -is:spam newer_than:${daysLookback}d`
   );
   const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=${maxResults}`;
 
@@ -228,7 +228,7 @@ export async function fetchFinancialEmailsFromGmail(
   if (messages.length === 0) {
     try {
       const fallbackQuery = encodeURIComponent(
-        `-category:social -is:draft -is:spam`
+        `-category:promotions -category:social -is:draft -is:spam`
       );
       const fallbackListRes = await fetch(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${fallbackQuery}&maxResults=${maxResults}`,
@@ -253,11 +253,12 @@ export async function fetchFinancialEmailsFromGmail(
     }
   }
 
-  // Final fallback to latest messages if needed
+  // Final fallback to latest messages excluding promotions if needed
   if (messages.length === 0) {
     try {
+      const fallbackNoPromoQuery = encodeURIComponent(`-category:promotions -is:draft -is:spam`);
       const inboxListRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25`,
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${fallbackNoPromoQuery}&maxResults=35`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,

@@ -279,6 +279,41 @@ export interface IntegrationsConfig {
 }
 
 /**
+ * Universal Currency Normalizer
+ * Resolves variations like "INR", "Indian Rupee", "rupees", "Rs.", "₹" into canonical ISO code and symbol
+ */
+export function normalizeCurrency(currency?: string, symbol?: string): { code: string; symbol: string } {
+  const c = (currency || '').trim().toUpperCase();
+  const s = (symbol || '').trim();
+
+  if (
+    c === 'INR' ||
+    c.includes('RUPEE') ||
+    c.includes('INDIAN') ||
+    c.includes('RS') ||
+    s === '₹'
+  ) {
+    return { code: 'INR', symbol: '₹' };
+  }
+  if (c === 'EUR' || c.includes('EURO') || s === '€') {
+    return { code: 'EUR', symbol: '€' };
+  }
+  if (c === 'GBP' || c.includes('POUND') || s === '£') {
+    return { code: 'GBP', symbol: '£' };
+  }
+  if (c === 'CAD' || s === 'CA$') {
+    return { code: 'CAD', symbol: 'CA$' };
+  }
+  if (c === 'AUD' || s === 'A$') {
+    return { code: 'AUD', symbol: 'A$' };
+  }
+  if (c === 'USD' || c.includes('DOLLAR') || s === '$') {
+    return { code: 'USD', symbol: '$' };
+  }
+  return { code: c || 'USD', symbol: s || '$' };
+}
+
+/**
  * Universal Currency Formatter
  */
 export function formatCurrency(
@@ -287,12 +322,12 @@ export function formatCurrency(
   currencyCode?: string
 ): string {
   const val = amount || 0;
-  const sym = currencySymbol || '$';
+  const { code, symbol } = normalizeCurrency(currencyCode, currencySymbol);
   
   // If Indian Rupee, format with Indian numbering system (e.g. ₹15,000.00)
-  if (sym === '₹' || currencyCode === 'INR') {
+  if (code === 'INR' || symbol === '₹') {
     return `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   
-  return `${sym}${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${symbol}${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }

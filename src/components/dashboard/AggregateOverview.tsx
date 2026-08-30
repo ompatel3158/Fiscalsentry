@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { AuditResult, formatCurrency } from '@/lib/types';
+import { AuditResult, formatCurrency, normalizeCurrency } from '@/lib/types';
 import {
   TrendingDown,
   DollarSign,
@@ -51,7 +51,7 @@ export function AggregateOverview({
     category?: FinancialCategory;
   } | null>(null);
 
-  // Compute available currencies and breakdown
+  // Compute available currencies and breakdown with canonical ISO normalization
   const currencyBreakdowns = useMemo(() => {
     const map: Record<
       string,
@@ -67,14 +67,12 @@ export function AggregateOverview({
     > = {};
 
     audits.forEach((a) => {
-      const code = a.currency || 'USD';
-      const sym =
-        a.currencySymbol || (code === 'INR' ? '₹' : code === 'EUR' ? '€' : code === 'GBP' ? '£' : '$');
+      const { code, symbol } = normalizeCurrency(a.currency, a.currencySymbol);
 
       if (!map[code]) {
         map[code] = {
           currency: code,
-          symbol: sym,
+          symbol: symbol,
           totalNet: 0,
           totalGross: 0,
           totalDisputed: 0,
@@ -100,10 +98,13 @@ export function AggregateOverview({
     return Object.values(map);
   }, [audits]);
 
-  // Filter audits based on selected currency
+  // Filter audits based on canonical currency code
   const filteredAudits = useMemo(() => {
     if (selectedCurrencyFilter === 'all') return audits;
-    return audits.filter((a) => (a.currency || 'USD') === selectedCurrencyFilter);
+    return audits.filter((a) => {
+      const { code } = normalizeCurrency(a.currency, a.currencySymbol);
+      return code === selectedCurrencyFilter;
+    });
   }, [audits, selectedCurrencyFilter]);
 
   // Determine primary currency symbol for active filter
@@ -115,8 +116,8 @@ export function AggregateOverview({
     if (audits.length === 0) return '$';
     const counts: Record<string, number> = {};
     audits.forEach((a) => {
-      const sym = a.currencySymbol || '$';
-      counts[sym] = (counts[sym] || 0) + 1;
+      const { symbol } = normalizeCurrency(a.currency, a.currencySymbol);
+      counts[symbol] = (counts[symbol] || 0) + 1;
     });
     return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0] || '$';
   }, [audits, selectedCurrencyFilter, currencyBreakdowns]);
@@ -678,7 +679,7 @@ export function AggregateOverview({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredAudits.map((audit) => {
-            const sym = audit.currencySymbol || primarySymbol;
+            const { code: itemCode, symbol: itemSym } = normalizeCurrency(audit.currency, audit.currencySymbol);
             const isHoldOrReleased =
               audit.transactionType === 'hold_lien' || audit.transactionType === 'unblocked_lien';
 
@@ -702,7 +703,7 @@ export function AggregateOverview({
                     </div>
 
                     <span className="px-2 py-0.5 rounded-md bg-black/5 dark:bg-white/10 text-[9px] font-mono font-bold shrink-0">
-                      {audit.currency || 'USD'}
+                      {itemCode}
                     </span>
                   </div>
                 </div>
@@ -710,7 +711,7 @@ export function AggregateOverview({
                 <div className="flex items-center justify-between pt-2 border-t border-black/[0.04] dark:border-white/[0.06]">
                   <div>
                     <div className="text-xs font-mono font-bold text-[#1d1d1f] dark:text-white">
-                      {formatCurrency(audit.totalBilledAmount, sym, audit.currency)}
+                      {formatCurrency(audit.totalBilledAmount, itemSym, itemCode)}
                     </div>
                     <div className="text-[9px] text-[#86868b]">
                       {audit.documentDate || audit.createdAt.split('T')[0]}
@@ -733,8 +734,8 @@ export function AggregateOverview({
                           },
                           title: audit.title,
                           amount: audit.totalBilledAmount,
-                          currencySymbol: sym,
-                          currency: audit.currency,
+                          currencySymbol: itemSym,
+                          currency: itemCode,
                           category: audit.financialCategory,
                         });
                       }}
@@ -752,7 +753,7 @@ export function AggregateOverview({
                         </span>
                       ) : audit.potentialRecoveryAmount > 0 ? (
                         <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">
-                          +{formatCurrency(audit.potentialRecoveryAmount, sym, audit.currency)}
+                          +{formatCurrency(audit.potentialRecoveryAmount, itemSym, itemCode)}
                         </span>
                       ) : (
                         <span className="text-[10px] text-[#86868b] font-medium">

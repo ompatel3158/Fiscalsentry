@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { AuditResult, ChatMessage, RAGSourceCitation } from './types';
+import { AuditResult, ChatMessage, RAGSourceCitation, normalizeCurrency } from './types';
 import { MOCK_AUDITS } from './mock-data';
 import { ExtractedEmail } from './gmail';
 
@@ -158,12 +158,15 @@ Output pure, valid JSON adhering to this TypeScript structure:
     const result = await model.generateContent(parts);
     const responseText = result.response.text();
     const parsed = parseJsonFromLlm(responseText);
+    const norm = normalizeCurrency(parsed.currency, parsed.currencySymbol);
 
     return {
       id: 'audit-' + Math.random().toString(36).substring(2, 9),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       ...parsed,
+      currency: norm.code,
+      currencySymbol: norm.symbol,
     };
   } catch (error: any) {
     console.error(`[Gemini ${modelToUse}] Multimodal audit error:`, error);
@@ -175,11 +178,14 @@ Output pure, valid JSON adhering to this TypeScript structure:
         const parts = [{ text: prompt }, { text: `Document content:\n${docText}` }];
         const fbResult = await fallbackModel.generateContent(parts);
         const fbParsed = parseJsonFromLlm(fbResult.response.text());
+        const fbNorm = normalizeCurrency(fbParsed.currency, fbParsed.currencySymbol);
         return {
           id: 'audit-' + Math.random().toString(36).substring(2, 9),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           ...fbParsed,
+          currency: fbNorm.code,
+          currencySymbol: fbNorm.symbol,
         };
       } catch (fbErr) {
         console.error('[Gemini] Fallback audit also failed:', fbErr);
@@ -217,8 +223,7 @@ export async function auditBatchFinancialEmails(
     if (validItems.length === 0) return null;
 
     const totalBilled = validItems.reduce((sum, v) => sum + (v.bank.amount || 0), 0);
-    const primaryCurrency = validItems[0].bank.currency || 'USD';
-    const primarySymbol = validItems[0].bank.currencySymbol || '$';
+    const { code: primaryCurrency, symbol: primarySymbol } = normalizeCurrency(validItems[0].bank.currency, validItems[0].bank.currencySymbol);
     const vendors = Array.from(new Set(validItems.map((v) => v.bank.merchant || v.email.sender).filter(Boolean))).join(', ');
 
     return {
@@ -433,6 +438,8 @@ Output pure, valid JSON only.
       confidenceScore: 0.95,
     }));
 
+    const norm = normalizeCurrency(parsed.currency, parsed.currencySymbol);
+
     return {
       id: 'audit-batch-' + Math.random().toString(36).substring(2, 9),
       emailIds: emails.map((e) => e.id),
@@ -440,6 +447,8 @@ Output pure, valid JSON only.
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       ...parsed,
+      currency: norm.code,
+      currencySymbol: norm.symbol,
       lineItems: enrichedLineItems,
     };
   } catch (err: any) {
@@ -478,6 +487,8 @@ Output pure, valid JSON only.
           };
         });
 
+        const fbNorm = normalizeCurrency(fbParsed.currency, fbParsed.currencySymbol);
+
         return {
           id: 'audit-batch-' + Math.random().toString(36).substring(2, 9),
           emailIds: emails.map((e) => e.id),
@@ -495,6 +506,8 @@ Output pure, valid JSON only.
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           ...fbParsed,
+          currency: fbNorm.code,
+          currencySymbol: fbNorm.symbol,
           lineItems: fbEnrichedLineItems,
         };
       } catch (fbErr) {
