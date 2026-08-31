@@ -11,12 +11,22 @@
   },
   "hosting": {
     "public": "out",
+    "cleanUrls": true,
+    "trailingSlash": true,
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
     ],
     "rewrites": [
+      {
+        "source": "/privacy/**",
+        "destination": "/privacy/index.html"
+      },
+      {
+        "source": "/terms/**",
+        "destination": "/terms/index.html"
+      },
       {
         "source": "**",
         "destination": "/index.html"

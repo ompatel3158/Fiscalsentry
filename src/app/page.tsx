@@ -19,6 +19,8 @@ import { MonthOverviewCanvas } from '@/components/dashboard/MonthOverviewCanvas'
 import { PDFPreviewModal } from '@/components/modals/PDFPreviewModal';
 import { IntegrationsModal } from '@/components/modals/IntegrationsModal';
 import { AuthModal } from '@/components/auth/AuthModal';
+import PrivacyPolicyPage from '@/app/privacy/page';
+import TermsOfServicePage from '@/app/terms/page';
 import {
   TrendingDown,
   Sparkles,
@@ -424,6 +426,16 @@ export default function Home() {
           /* Financial Year & Spending Tracker View */
           <div className="flex-1 flex h-full w-full overflow-y-auto bg-[#fbfbfd] dark:bg-[#000000]">
             <FinancialYearView />
+          </div>
+        ) : currentView === 'privacy' ? (
+          /* Privacy Policy View */
+          <div className="flex-1 flex h-full w-full overflow-y-auto bg-[#fbfbfd] dark:bg-[#000000]">
+            <PrivacyPolicyPage />
+          </div>
+        ) : currentView === 'terms' ? (
+          /* Terms and Conditions View */
+          <div className="flex-1 flex h-full w-full overflow-y-auto bg-[#fbfbfd] dark:bg-[#000000]">
+            <TermsOfServicePage />
           </div>
         ) : (
           /* Dedicated Control Center & Settings View */

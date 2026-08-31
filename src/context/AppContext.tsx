@@ -29,8 +29,8 @@ import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 
 interface AppContextType {
-  currentView: 'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings';
-  setCurrentView: (view: 'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings') => void;
+  currentView: 'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings' | 'privacy' | 'terms';
+  setCurrentView: (view: 'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings' | 'privacy' | 'terms') => void;
   allAudits: AuditResult[];
   activeAudit: AuditResult | null;
   setActiveAudit: (audit: AuditResult | null) => void;
@@ -62,7 +62,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const { user, userProfile, googleAccessToken, connectGoogleWorkspace, refreshGoogleWorkspaceToken } = useAuth();
   
   // 1. Initial view state
-  const [currentView, setCurrentView] = useState<'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings'>('dashboard');
+  const [currentView, setCurrentView] = useState<'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings' | 'privacy' | 'terms'>('dashboard');
   
   // 2. Audits state
   const [allAudits, setAllAudits] = useState<AuditResult[]>([]);
@@ -70,9 +70,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Hydrate client view state on mount & handle global logout listener
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const seen = localStorage.getItem('fs_has_seen_welcome');
-      if (!seen) {
-        setCurrentView('welcome');
+      const hash = window.location.hash;
+      const path = window.location.pathname;
+      if (path === '/privacy' || hash === '#privacy') {
+        setCurrentView('privacy');
+      } else if (path === '/terms' || hash === '#terms') {
+        setCurrentView('terms');
+      } else {
+        const seen = localStorage.getItem('fs_has_seen_welcome');
+        if (!seen) {
+          setCurrentView('welcome');
+        }
       }
     }
 
