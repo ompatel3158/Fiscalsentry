@@ -15,17 +15,18 @@ import {
   Plus,
   Copy,
   Check,
+  Menu,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
-export function ChatArea() {
+export function ChatArea({ onToggleMobileSidebar }: { onToggleMobileSidebar?: () => void }) {
   const { activeMessages, isStreaming, activeSession, createNewSession } = useChat();
   const { setCurrentView, setActiveAudit, allAudits } = useApp();
   const { userProfile, updateProfileSettings, user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const activeModel = userProfile?.preferredModel || 'gemini-3.1-flash-lite';
+  const activeModel = userProfile?.preferredModel || 'gemini-3.7-flash';
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -50,11 +51,24 @@ export function ChatArea() {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden select-text">
       {/* Top Chat Header */}
-      <div className="px-3 sm:px-4 py-2.5 border-b border-black/[0.06] dark:border-white/[0.08] bg-white/60 dark:bg-[#09090b]/60 backdrop-blur-xl flex items-center justify-between shrink-0 select-none">
-        <div className="flex items-center gap-2.5 min-w-0">
+      <div className="px-2.5 sm:px-4 py-2 sm:py-2.5 border-b border-black/[0.06] dark:border-white/[0.08] bg-white/70 dark:bg-[#09090b]/70 backdrop-blur-xl flex items-center justify-between shrink-0 select-none gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1">
+          {/* Mobile Hamburger Menu Button (shows on mobile screens) */}
+          {onToggleMobileSidebar && (
+            <button
+              type="button"
+              onClick={onToggleMobileSidebar}
+              className="p-1.5 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-[#1d1d1f] dark:text-white flex lg:hidden items-center justify-center transition-all active:scale-[0.97] shrink-0"
+              title="Open Consultations Menu"
+              aria-label="Open Consultations Menu"
+            >
+              <Menu className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            </button>
+          )}
+
           {/* Official Symmetry Mark Tile Logo */}
           <div className="w-6 h-6 rounded-lg bg-white dark:bg-[#121215] border border-black/[0.06] dark:border-white/[0.08] shadow-2xs flex items-center justify-center shrink-0">
-            <svg viewBox="0 0 240 240" className="w-4 h-4" xmlns="http://www.w3.org/2000/svg">
+            <svg viewBox="0 0 240 240" className="w-3.5 h-3.5 sm:w-4 sm:h-4" xmlns="http://www.w3.org/2000/svg">
               <g transform="translate(120,120) scale(0.95)">
                 <path d="M0,-115 L-80,-65 L-80,25 L0,115 Z" fill="#0E2A47" className="dark:fill-[#123350]" />
                 <path d="M0,-115 L80,-65 L80,25 L0,115 Z" fill="#14C9B7" />
@@ -64,35 +78,36 @@ export function ChatArea() {
             </svg>
           </div>
 
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h2 className="text-xs sm:text-sm font-bold text-[#1d1d1f] dark:text-white truncate">
-              {activeSession?.title || 'Voidy AI • Financial Intelligence Manager'}
+              {activeSession?.title || 'Voidy AI Consultation'}
             </h2>
             <p className="text-[10px] text-[#86868b] truncate hidden sm:block font-mono">
-              Voidy AI Executive Manager • {activeModel} • 1-Year Financial Ledger Active
+              Voidy AI Executive Manager • 1-Year Financial Ledger Active
             </p>
           </div>
         </div>
 
         {/* Right Header Actions: Model Switcher & New Chat */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Active Model Selector */}
           <div className="flex items-center">
             <select
               value={activeModel}
               onChange={(e) => handleModelChange(e.target.value)}
-              className="text-[11px] bg-black/5 dark:bg-[#18181b] text-emerald-600 dark:text-emerald-400 font-bold rounded-lg px-2 py-1 focus:outline-none cursor-pointer border border-black/[0.06] dark:border-white/[0.08] shadow-2xs"
+              className="text-[10px] sm:text-[11px] max-w-[115px] sm:max-w-none bg-black/5 dark:bg-[#18181b] text-emerald-600 dark:text-emerald-400 font-bold rounded-lg px-2 py-1 focus:outline-none cursor-pointer border border-black/[0.06] dark:border-white/[0.08] shadow-2xs"
             >
-              <option value="gemini-3.7-flash">✨ Gemini 3.7 Flash</option>
-              <option value="gemini-3.6-flash">🧠 Gemini 3.6 Flash</option>
-              <option value="gemini-3.5-flash">⚡ Gemini 3.5 Flash</option>
-              <option value="gemini-3.5-flash-lite">🚀 Gemini 3.5 Flash Lite</option>
+              <option value="gemini-3.7-flash">✨ 3.7 Flash</option>
+              <option value="gemini-3.6-flash">🧠 3.6 Flash</option>
+              <option value="gemini-3.5-flash">⚡ 3.5 Flash</option>
+              <option value="gemini-3.5-flash-lite">🚀 3.5 Lite</option>
             </select>
           </div>
 
           <button
             onClick={() => createNewSession()}
-            className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-[#1d1d1f] dark:text-white flex items-center gap-1 transition-all active:scale-[0.97]"
+            className="p-1.5 sm:px-2.5 sm:py-1 text-xs font-semibold rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-[#1d1d1f] dark:text-white flex items-center gap-1 transition-all active:scale-[0.97]"
+            title="Start new consultation"
           >
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">New Chat</span>

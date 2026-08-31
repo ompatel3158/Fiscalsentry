@@ -257,11 +257,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }));
 
     if (!rateCheck.allowed) {
-      toast.error(rateCheck.message || 'Voidy AI hourly query limit reached.');
+      toast.error(rateCheck.message || 'Voidy AI 5-hour query limit reached.');
       const rateLimitNotice: ChatMessage = {
         id: 'msg-rl-' + Date.now(),
         role: 'assistant',
-        content: `⚠️ **Voidy AI Quota Cooldown Active**\n\nYou have used all **${rateCheck.state.maxRequests}/${rateCheck.state.maxRequests}** queries for this hourly window. Your rate limit will automatically reset.\n\n*Tip: You can still review existing audited statements and run local document calculations.*`,
+        content: `⚠️ **Voidy AI Quota Cooldown Active**\n\nYou have used all **${rateCheck.state.maxRequests}/${rateCheck.state.maxRequests}** queries for this 5-hour window. Your rate limit will automatically reset.\n\n*Tip: You can still review existing audited statements and run local document calculations.*`,
         createdAt: new Date().toISOString(),
       };
       setMessagesMap((prev) => ({

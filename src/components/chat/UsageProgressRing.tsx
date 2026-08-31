@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { VoidyRateLimit, formatCooldown } from '@/lib/rateLimiter';
-import { Zap, Clock, AlertTriangle } from 'lucide-react';
+import { Zap, Clock, AlertTriangle, X, Sparkles } from 'lucide-react';
 
 interface UsageProgressRingProps {
   charCount: number;
@@ -18,7 +18,26 @@ export function UsageProgressRing({
   rateLimit,
 }: UsageProgressRingProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [cooldownText, setCooldownText] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close modal when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsModalOpen(false);
+      }
+    };
+    if (isModalOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isModalOpen]);
 
   // Calculate character consumption ratio
   const charPercent = Math.min(100, Math.round((charCount / maxChars) * 100));
@@ -29,7 +48,7 @@ export function UsageProgressRing({
     Math.round((rateLimit.usedRequests / rateLimit.maxRequests) * 100)
   );
 
-  // If user is actively typing, highlight char budget, otherwise show hourly request quota
+  // If user is actively typing, highlight char budget, otherwise show 5-hour request quota
   const isTyping = charCount > 0;
   const activePercent = isTyping ? charPercent : quotaPercent;
 
@@ -68,77 +87,103 @@ export function UsageProgressRing({
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (activePercent / 100) * circumference;
 
+  const showDetails = isHovered || isModalOpen;
+
   return (
     <div
+      ref={containerRef}
       className="relative flex items-center justify-center select-none"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Interactive Tooltip Popover */}
+      {/* Interactive Tooltip / Mobile Popover Card */}
       <AnimatePresence>
-        {isHovered && (
-          <motion.div
-            initial={{ opacity: 0, y: 6, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.95 }}
-            transition={{ duration: 0.15 }}
-            className="absolute bottom-full mb-2 right-0 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 w-64 rounded-2xl bg-white dark:bg-[#121215] border border-black/[0.08] dark:border-white/[0.1] shadow-2xl p-3 z-50 text-xs backdrop-blur-xl pointer-events-none"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.04] pb-2 mb-2">
-              <div className="flex items-center gap-1.5 font-bold text-[#1d1d1f] dark:text-white">
-                <Zap className={`w-3.5 h-3.5 ${badgeColor}`} />
-                <span>Voidy AI Usage Quota</span>
-              </div>
-              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md ${
-                rateLimit.isRateLimited
-                  ? 'bg-rose-500/10 text-rose-500'
-                  : 'bg-emerald-500/10 text-emerald-500'
-              }`}>
-                {rateLimit.isRateLimited ? 'RATE LIMITED' : 'ACTIVE'}
-              </span>
-            </div>
+        {showDetails && (
+          <>
+            {/* Mobile backdrop for easy dismissal */}
+            {isModalOpen && (
+              <div
+                className="fixed inset-0 z-40 bg-black/30 backdrop-blur-2xs sm:hidden"
+                onClick={() => setIsModalOpen(false)}
+              />
+            )}
 
-            {/* Quota Details */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center text-[#86868b]">
-                <span>Hourly Queries:</span>
-                <span className="font-mono font-bold text-[#1d1d1f] dark:text-white">
-                  {rateLimit.usedRequests} / {rateLimit.maxRequests} used
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center text-[#86868b]">
-                <span>Remaining Requests:</span>
-                <span className={`font-mono font-bold ${rateLimit.remainingRequests <= 3 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                  {rateLimit.remainingRequests} left
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center text-[#86868b]">
-                <span>Message Length:</span>
-                <span className="font-mono font-bold text-[#1d1d1f] dark:text-white">
-                  {charCount} / {maxChars} chars
-                </span>
+            <motion.div
+              initial={{ opacity: 0, y: 6, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 4, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="absolute bottom-full mb-2 right-0 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 w-72 sm:w-64 rounded-2xl bg-white dark:bg-[#121215] border border-black/[0.08] dark:border-white/[0.1] shadow-2xl p-3.5 z-50 text-xs backdrop-blur-xl"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.04] pb-2 mb-2">
+                <div className="flex items-center gap-1.5 font-bold text-[#1d1d1f] dark:text-white">
+                  <Zap className={`w-3.5 h-3.5 ${badgeColor}`} />
+                  <span>Voidy AI Usage Quota</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md ${
+                    rateLimit.isRateLimited
+                      ? 'bg-rose-500/10 text-rose-500'
+                      : 'bg-emerald-500/10 text-emerald-500'
+                  }`}>
+                    {rateLimit.isRateLimited ? 'RATE LIMITED' : 'ACTIVE'}
+                  </span>
+                  {isModalOpen && (
+                    <button
+                      onClick={() => setIsModalOpen(false)}
+                      className="p-0.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="flex justify-between items-center text-[#86868b] pt-1 border-t border-black/[0.04] dark:border-white/[0.04]">
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-slate-400" />
-                  <span>Resets in:</span>
-                </span>
-                <span className="font-mono font-bold text-amber-500">
-                  {cooldownText}
-                </span>
+              {/* Quota Details */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-[#86868b]">
+                  <span>5-Hour Queries:</span>
+                  <span className="font-mono font-bold text-[#1d1d1f] dark:text-white">
+                    {rateLimit.usedRequests} / {rateLimit.maxRequests} used
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-[#86868b]">
+                  <span>Remaining Requests:</span>
+                  <span className={`font-mono font-bold ${rateLimit.remainingRequests <= 3 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                    {rateLimit.remainingRequests} left
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-[#86868b]">
+                  <span>Message Length:</span>
+                  <span className="font-mono font-bold text-[#1d1d1f] dark:text-white">
+                    {charCount} / {maxChars} chars
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-[#86868b] pt-1.5 border-t border-black/[0.04] dark:border-white/[0.04]">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-slate-400" />
+                    <span>Resets in:</span>
+                  </span>
+                  <span className="font-mono font-bold text-amber-500">
+                    {cooldownText}
+                  </span>
+                </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 
-      {/* SVG Circular Progress Ring */}
-      <div
-        className={`relative cursor-help transition-transform active:scale-95 ${
+      {/* SVG Circular Progress Ring Button */}
+      <button
+        type="button"
+        onClick={() => setIsModalOpen((prev) => !prev)}
+        aria-label="View Voidy AI Quota Usage"
+        className={`relative cursor-pointer transition-transform active:scale-95 focus:outline-none rounded-full ${
           rateLimit.isRateLimited ? 'animate-pulse' : ''
         }`}
         style={{
@@ -188,7 +233,7 @@ export function UsageProgressRing({
             <Zap className={`w-2.5 h-2.5 ${badgeColor}`} />
           )}
         </div>
-      </div>
+      </button>
     </div>
   );
 }

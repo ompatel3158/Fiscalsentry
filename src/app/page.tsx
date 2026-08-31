@@ -416,7 +416,7 @@ export default function Home() {
 
             {/* Chat Area & Universal Input */}
             <div className="flex-1 flex flex-col h-full bg-[#fbfbfd] dark:bg-[#000000]">
-              <ChatArea />
+              <ChatArea onToggleMobileSidebar={() => setIsMobileSidebarOpen(true)} />
               <ChatInput />
             </div>
           </div>

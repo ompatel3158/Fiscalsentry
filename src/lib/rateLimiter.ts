@@ -9,9 +9,9 @@ export interface VoidyRateLimit {
   maxCharsPerMessage: number;
 }
 
-const STORAGE_KEY = 'fs_voidy_rate_limit_v2';
-const DEFAULT_MAX_REQUESTS = 25; // 25 queries per 1-hour window
-const WINDOW_DURATION_MS = 60 * 60 * 1000; // 1 Hour (3,600,000 ms)
+const STORAGE_KEY = 'fs_voidy_rate_limit_v5h';
+const DEFAULT_MAX_REQUESTS = 30; // 30 queries per 5-hour window
+const WINDOW_DURATION_MS = 5 * 60 * 60 * 1000; // 5 Hours (18,000,000 ms)
 const MAX_CHARS_PER_MESSAGE = 4000;
 
 export function getVoidyRateLimitState(): VoidyRateLimit {
@@ -81,7 +81,7 @@ export function consumeVoidyRequest(): { allowed: boolean; state: VoidyRateLimit
     return {
       allowed: false,
       state: current,
-      message: `Voidy AI rate limit reached (${current.maxRequests}/${current.maxRequests} hourly queries used). Cooldown resets in ${formatted}.`,
+      message: `Voidy AI rate limit reached (${current.maxRequests}/${current.maxRequests} 5-hour queries used). Cooldown resets in ${formatted}.`,
     };
   }
 
@@ -107,9 +107,13 @@ export function consumeVoidyRequest(): { allowed: boolean; state: VoidyRateLimit
 export function formatCooldown(ms: number): string {
   if (ms <= 0) return '0s';
   const totalSeconds = Math.ceil(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+  }
   if (minutes > 0) {
     return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
   }
