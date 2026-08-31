@@ -1,5 +1,5 @@
 import { AuditResult, formatCurrency } from './types';
-import { YearlyFinancialHealthReport } from './financialManager';
+import { generateDisputeLetterPDF, generatePurchaseOrderPDF, generateMonthlyLedgerPDF } from './pdf-generator';
 
 function downloadFile(content: string, filename: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -14,7 +14,41 @@ function downloadFile(content: string, filename: string, mimeType: string) {
 }
 
 /**
- * 1. Export Single Audit to Word (.doc)
+ * 1. Export Single Audit to PDF (.pdf)
+ */
+export function exportAuditToPDF(audit: AuditResult) {
+  const title = (audit.title || 'Financial_Audit_Dossier').replace(/[<>:"/\\|?*]/g, '_');
+  try {
+    let doc;
+    if (audit.category === 'vendor_quotes') {
+      doc = generatePurchaseOrderPDF(audit);
+      doc.save(`${title}_PO.pdf`);
+    } else {
+      doc = generateDisputeLetterPDF(audit);
+      doc.save(`${title}_Dispute_Dossier.pdf`);
+    }
+  } catch (err: any) {
+    console.error('PDF export error:', err);
+    window.print();
+  }
+}
+
+/**
+ * 2. Export Monthly / Yearly Ledger to PDF (.pdf)
+ */
+export function exportMonthlyLedgerToPDF(monthAudits: AuditResult[], monthLabel: string) {
+  const safeMonth = (monthLabel || 'Monthly_Ledger').replace(/[<>:"/\\|?*]/g, '_');
+  try {
+    const doc = generateMonthlyLedgerPDF(monthAudits, monthLabel);
+    doc.save(`FiscalSentry_Ledger_${safeMonth}.pdf`);
+  } catch (err: any) {
+    console.error('Monthly PDF export error:', err);
+    window.print();
+  }
+}
+
+/**
+ * 3. Export Single Audit to Word (.doc / .docx compatible) with 1-inch margins & fixed table width
  */
 export function exportAuditToWord(audit: AuditResult) {
   const title = (audit.title || 'Financial_Audit_Report').replace(/[<>:"/\\|?*]/g, '_');
@@ -26,13 +60,13 @@ export function exportAuditToWord(audit: AuditResult) {
     .map(
       (li) => `
       <tr>
-        <td style="border: 1px solid #ddd; padding: 8px;">${li.code || 'N/A'}</td>
-        <td style="border: 1px solid #ddd; padding: 8px;">${li.description || ''}</td>
-        <td style="border: 1px solid #ddd; padding: 8px;">${li.financialCategory || 'General'}</td>
-        <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${formatCurrency(li.originalAmount || 0, audit.currency, audit.currencySymbol)}</td>
-        <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${formatCurrency(li.benchmarkAmount || 0, audit.currency, audit.currencySymbol)}</td>
-        <td style="border: 1px solid #ddd; padding: 8px; text-align: right; color: #10b981; font-weight: bold;">${formatCurrency(li.deltaSavings || 0, audit.currency, audit.currencySymbol)}</td>
-        <td style="border: 1px solid #ddd; padding: 8px;">${(li.status || '').toUpperCase()}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; word-break: break-word;">${li.code || 'N/A'}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; word-break: break-word;">${li.description || ''}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; word-break: break-word;">${li.financialCategory || 'General'}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; text-align: right; word-break: break-word;">${formatCurrency(li.originalAmount || 0, audit.currency, audit.currencySymbol)}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; text-align: right; word-break: break-word;">${formatCurrency(li.benchmarkAmount || 0, audit.currency, audit.currencySymbol)}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; text-align: right; color: #047857; font-weight: bold; word-break: break-word;">${formatCurrency(li.deltaSavings || 0, audit.currency, audit.currencySymbol)}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; word-break: break-word;">${(li.status || '').toUpperCase()}</td>
       </tr>
     `
     )
@@ -41,9 +75,9 @@ export function exportAuditToWord(audit: AuditResult) {
   const citationsHtml = (audit.citations || [])
     .map(
       (c) => `
-      <div style="margin-bottom: 12px; padding: 10px; background-color: #f9f9f9; border-left: 4px solid #10b981;">
-        <strong>${c.statute || ''}: ${c.title || ''}</strong> (${c.applicableSection || ''})<br/>
-        <span style="font-size: 11pt; color: #555;">${c.summary || ''}</span>
+      <div style="margin-bottom: 10px; padding: 8px 12px; background-color: #f8fafc; border-left: 4px solid #059669;">
+        <strong style="font-size: 10pt; color: #0f172a;">${c.statute || ''}: ${c.title || ''}</strong> <span style="font-size: 9.5pt; color: #64748b;">(${c.applicableSection || ''})</span><br/>
+        <span style="font-size: 9.5pt; color: #334155;">${c.summary || ''}</span>
       </div>
     `
     )
@@ -54,73 +88,141 @@ export function exportAuditToWord(audit: AuditResult) {
     <head>
       <meta charset="utf-8">
       <title>${title}</title>
+      <!--[if gte mso 9]>
+      <xml>
+        <w:WordDocument>
+          <w:View>Print</w:View>
+          <w:Zoom>100</w:Zoom>
+          <w:DoNotOptimizeForBrowser/>
+        </w:WordDocument>
+      </xml>
+      <![endif]-->
       <style>
-        body { font-family: 'Segoe UI', Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #222; }
-        h1 { font-size: 18pt; color: #0f766e; margin-bottom: 4px; }
-        h2 { font-size: 14pt; color: #111827; margin-top: 20px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
-        .meta-table { width: 100%; margin-bottom: 16px; border-collapse: collapse; }
-        .meta-table td { padding: 6px 0; }
-        .data-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-        .data-table th { background-color: #f3f4f6; border: 1px solid #ddd; padding: 8px; text-align: left; font-weight: bold; }
-        .total-box { background-color: #ecfdf5; border: 1px solid #a7f3d0; padding: 12px; margin-top: 16px; border-radius: 6px; }
+        @page Section1 {
+          size: 8.5in 11.0in;
+          margin: 1.0in 1.0in 1.0in 1.0in;
+          mso-header-margin: 0.5in;
+          mso-footer-margin: 0.5in;
+          mso-paper-source: 0;
+        }
+        div.Section1 {
+          page: Section1;
+        }
+        body {
+          font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+          font-size: 11pt;
+          line-height: 1.4;
+          color: #1a1a1a;
+          margin: 0;
+          padding: 0;
+        }
+        h1 {
+          font-size: 16pt;
+          color: #047857;
+          margin-bottom: 2px;
+          font-weight: bold;
+        }
+        h2 {
+          font-size: 12pt;
+          color: #0f172a;
+          margin-top: 18px;
+          margin-bottom: 6px;
+          border-bottom: 1px solid #cbd5e1;
+          padding-bottom: 3px;
+        }
+        table {
+          width: 100% !important;
+          max-width: 100% !important;
+          table-layout: fixed !important;
+          border-collapse: collapse !important;
+          margin-top: 10px;
+          margin-bottom: 10px;
+          word-wrap: break-word !important;
+        }
+        table.meta-table td {
+          padding: 4px 0;
+          font-size: 10pt;
+        }
+        table.data-table th, table.data-table td {
+          border: 1px solid #cbd5e1 !important;
+          padding: 6px 8px !important;
+          font-size: 9.5pt !important;
+          word-break: break-word !important;
+          overflow-wrap: break-word !important;
+        }
+        table.data-table th {
+          background-color: #f1f5f9 !important;
+          color: #0f172a !important;
+          font-weight: bold !important;
+        }
+        .total-box {
+          background-color: #ecfdf5;
+          border: 1px solid #a7f3d0;
+          padding: 10px;
+          margin-top: 12px;
+          margin-bottom: 12px;
+          border-radius: 4px;
+        }
       </style>
     </head>
     <body>
-      <h1>FiscalSentry Autonomous Financial Defense Dossier</h1>
-      <p style="color: #6b7280; font-size: 10pt;">Certified via Google Gemini 3.7 Flash AI • Generated on ${new Date().toLocaleDateString()}</p>
-      
-      <table class="meta-table">
-        <tr>
-          <td><strong>Statement Title:</strong> ${audit.title || 'N/A'}</td>
-          <td><strong>Document Date:</strong> ${safeDate}</td>
-        </tr>
-        <tr>
-          <td><strong>Provider / Vendor:</strong> ${safeProvider}</td>
-          <td><strong>Account / Ref #:</strong> ${audit.accountNumber || 'N/A'}</td>
-        </tr>
-        <tr>
-          <td><strong>Risk Level:</strong> <span style="color: ${audit.riskLevel === 'critical' ? '#ef4444' : '#10b981'}; font-weight: bold;">${(audit.riskLevel || 'standard').toUpperCase()}</span></td>
-          <td><strong>Financial Category:</strong> ${audit.financialCategory || 'invoice_receipt'}</td>
-        </tr>
-      </table>
-
-      <div class="total-box">
-        <table style="width: 100%;">
+      <div class="Section1">
+        <h1>FiscalSentry Autonomous Financial Defense Dossier</h1>
+        <p style="color: #64748b; font-size: 9.5pt; margin-top: 0;">Certified via Google Gemini 3.7 Flash AI • Generated on ${new Date().toLocaleDateString()}</p>
+        
+        <table class="meta-table" style="width: 100%; border: none;">
           <tr>
-            <td><strong>Total Billed Amount:</strong> ${formatCurrency(audit.totalBilledAmount || 0, audit.currency, audit.currencySymbol)}</td>
-            <td><strong>Fair Benchmark:</strong> ${formatCurrency(audit.fairBenchmarkAmount || 0, audit.currency, audit.currencySymbol)}</td>
-            <td style="color: #059669; font-size: 13pt;"><strong>Potential Recovery:</strong> +${formatCurrency(audit.potentialRecoveryAmount || 0, audit.currency, audit.currencySymbol)}</td>
+            <td style="width: 50%;"><strong>Statement Title:</strong> ${audit.title || 'N/A'}</td>
+            <td style="width: 50%;"><strong>Document Date:</strong> ${safeDate}</td>
+          </tr>
+          <tr>
+            <td><strong>Provider / Vendor:</strong> ${safeProvider}</td>
+            <td><strong>Account / Ref #:</strong> ${audit.accountNumber || 'N/A'}</td>
+          </tr>
+          <tr>
+            <td><strong>Risk Level:</strong> <span style="color: ${audit.riskLevel === 'critical' ? '#dc2626' : '#059669'}; font-weight: bold;">${(audit.riskLevel || 'standard').toUpperCase()}</span></td>
+            <td><strong>Financial Category:</strong> ${audit.financialCategory || 'invoice_receipt'}</td>
           </tr>
         </table>
+
+        <div class="total-box">
+          <table style="width: 100%; border: none;">
+            <tr>
+              <td style="border: none; font-size: 10pt;"><strong>Total Billed Amount:</strong> ${formatCurrency(audit.totalBilledAmount || 0, audit.currency, audit.currencySymbol)}</td>
+              <td style="border: none; font-size: 10pt;"><strong>Fair Benchmark:</strong> ${formatCurrency(audit.fairBenchmarkAmount || 0, audit.currency, audit.currencySymbol)}</td>
+              <td style="border: none; font-size: 11pt; color: #047857;"><strong>Potential Recovery:</strong> +${formatCurrency(audit.potentialRecoveryAmount || 0, audit.currency, audit.currencySymbol)}</td>
+            </tr>
+          </table>
+        </div>
+
+        <h2>Executive Audit Summary</h2>
+        <p style="font-size: 10pt; line-height: 1.45; color: #334155;">${safeSummary}</p>
+
+        <h2>Itemized Transaction Audit</h2>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 12%;">Code</th>
+              <th style="width: 30%;">Description</th>
+              <th style="width: 14%;">Category</th>
+              <th style="width: 12%; text-align: right;">Billed</th>
+              <th style="width: 12%; text-align: right;">Benchmark</th>
+              <th style="width: 12%; text-align: right;">Dispute</th>
+              <th style="width: 8%;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lineItemsHtml || '<tr><td colspan="7" style="text-align:center; padding:10px;">No itemized lines recorded</td></tr>'}
+          </tbody>
+        </table>
+
+        ${citationsHtml ? `<h2>Statutory Precedents & Legal Basis</h2>${citationsHtml}` : ''}
+
+        <hr style="margin-top: 24px; border: 0; border-top: 1px solid #cbd5e1;" />
+        <p style="font-size: 8.5pt; color: #94a3b8; text-align: center; margin-top: 6px;">
+          FiscalSentry Void Autonomous Intelligence • Zero-Knowledge Encrypted Paperwork Sentry
+        </p>
       </div>
-
-      <h2>Executive Audit Summary</h2>
-      <p>${safeSummary}</p>
-
-      <h2>Itemized Transaction Audit</h2>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Code</th>
-            <th>Description</th>
-            <th>Category</th>
-            <th style="text-align: right;">Billed</th>
-            <th style="text-align: right;">Benchmark</th>
-            <th style="text-align: right;">Dispute / Delta</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${lineItemsHtml || '<tr><td colspan="7" style="text-align:center; padding:12px;">No itemized lines recorded</td></tr>'}
-        </tbody>
-      </table>
-
-      ${citationsHtml ? `<h2>Statutory Precedents & Legal Basis</h2>${citationsHtml}` : ''}
-
-      <hr style="margin-top: 30px; border: 0; border-top: 1px solid #ddd;" />
-      <p style="font-size: 9pt; color: #9ca3af; text-align: center;">
-        FiscalSentry Void Autonomous Intelligence • Zero-Knowledge Encrypted Paperwork Sentry
-      </p>
     </body>
     </html>
   `;
@@ -221,26 +323,27 @@ export function exportAuditToJSON(audit: AuditResult) {
 }
 
 /**
- * 5. Export Monthly Ledger to Word (.doc)
+ * 7. Export Monthly / Yearly Ledger to Word (.doc) with 1-inch margins & fixed table width
  */
 export function exportMonthlyLedgerToWord(monthAudits: AuditResult[], monthLabel: string) {
   const safeMonth = (monthLabel || 'Monthly_Ledger').replace(/[<>:"/\\|?*]/g, '_');
   const totalBilled = monthAudits.reduce((acc, a) => acc + (a.totalBilledAmount || 0), 0);
   const totalRecovery = monthAudits.reduce((acc, a) => acc + (a.potentialRecoveryAmount || 0), 0);
 
-  const auditsHtml = monthAudits
+  const rowsHtml = monthAudits
     .map(
       (a) => `
-      <div style="margin-bottom: 20px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #fafafa;">
-        <h3 style="margin: 0 0 6px 0; color: #111827;">${a.title || 'Statement'}</h3>
-        <p style="font-size: 10pt; color: #6b7280; margin: 0 0 8px 0;">
-          <strong>Date:</strong> ${a.documentDate || a.createdAt?.split('T')[0] || ''} | 
-          <strong>Provider:</strong> ${a.providerOrVendor || ''} | 
-          <strong>Billed:</strong> ${formatCurrency(a.totalBilledAmount || 0, a.currency, a.currencySymbol)} | 
-          <strong style="color: #059669;">Disputed:</strong> +${formatCurrency(a.potentialRecoveryAmount || 0, a.currency, a.currencySymbol)}
-        </p>
-        <p style="font-size: 10pt; color: #374151; margin: 0;">${a.summary || ''}</p>
-      </div>
+      <tr>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; word-break: break-word;">${a.documentDate || a.createdAt?.split('T')[0] || ''}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; word-break: break-word;">
+          <strong>${a.title || ''}</strong><br/>
+          <span style="font-size: 8.5pt; color: #64748b;">${a.providerOrVendor || ''}</span>
+        </td>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; word-break: break-word;">${a.financialCategory || a.category || 'General'}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; text-align: right; word-break: break-word;">${formatCurrency(a.totalBilledAmount || 0, a.currency, a.currencySymbol)}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; text-align: right; color: #047857; font-weight: bold; word-break: break-word;">+${formatCurrency(a.potentialRecoveryAmount || 0, a.currency, a.currencySymbol)}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; word-break: break-word; color: ${a.riskLevel === 'critical' ? '#dc2626' : '#334155'};">${(a.riskLevel || 'standard').toUpperCase()}</td>
+      </tr>
     `
     )
     .join('');
@@ -250,21 +353,116 @@ export function exportMonthlyLedgerToWord(monthAudits: AuditResult[], monthLabel
     <head>
       <meta charset="utf-8">
       <title>FiscalSentry Monthly Financial Ledger - ${monthLabel}</title>
+      <!--[if gte mso 9]>
+      <xml>
+        <w:WordDocument>
+          <w:View>Print</w:View>
+          <w:Zoom>100</w:Zoom>
+          <w:DoNotOptimizeForBrowser/>
+        </w:WordDocument>
+      </xml>
+      <![endif]-->
       <style>
-        body { font-family: 'Segoe UI', Calibri, Arial, sans-serif; font-size: 11pt; color: #222; }
-        h1 { font-size: 18pt; color: #0f766e; }
+        @page Section1 {
+          size: 8.5in 11.0in;
+          margin: 1.0in 1.0in 1.0in 1.0in;
+          mso-header-margin: 0.5in;
+          mso-footer-margin: 0.5in;
+          mso-paper-source: 0;
+        }
+        div.Section1 {
+          page: Section1;
+        }
+        body {
+          font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+          font-size: 11pt;
+          line-height: 1.4;
+          color: #1a1a1a;
+          margin: 0;
+          padding: 0;
+        }
+        h1 {
+          font-size: 16pt;
+          color: #047857;
+          margin-bottom: 2px;
+          font-weight: bold;
+        }
+        h2 {
+          font-size: 12pt;
+          color: #0f172a;
+          margin-top: 18px;
+          margin-bottom: 6px;
+          border-bottom: 1px solid #cbd5e1;
+          padding-bottom: 3px;
+        }
+        table {
+          width: 100% !important;
+          max-width: 100% !important;
+          table-layout: fixed !important;
+          border-collapse: collapse !important;
+          margin-top: 10px;
+          margin-bottom: 10px;
+          word-wrap: break-word !important;
+        }
+        table.data-table th, table.data-table td {
+          border: 1px solid #cbd5e1 !important;
+          padding: 6px 8px !important;
+          font-size: 9.5pt !important;
+          word-break: break-word !important;
+          overflow-wrap: break-word !important;
+        }
+        table.data-table th {
+          background-color: #f1f5f9 !important;
+          color: #0f172a !important;
+          font-weight: bold !important;
+        }
+        .total-box {
+          background-color: #ecfdf5;
+          border: 1px solid #a7f3d0;
+          padding: 10px;
+          margin-top: 12px;
+          margin-bottom: 12px;
+          border-radius: 4px;
+        }
       </style>
     </head>
     <body>
-      <h1>FiscalSentry Monthly Ledger - ${monthLabel}</h1>
-      <p style="color: #6b7280;">Certified via Google Gemini 3.7 Flash AI • Generated on ${new Date().toLocaleDateString()}</p>
-      <div style="background: #ecfdf5; padding: 12px; border-radius: 6px; margin-bottom: 20px;">
-        <strong>Total Incurred / Billed:</strong> ${formatCurrency(totalBilled)} | 
-        <strong style="color: #059669;">Total Disputed Savings:</strong> +${formatCurrency(totalRecovery)} | 
-        <strong>Total Documents:</strong> ${monthAudits.length}
+      <div class="Section1">
+        <h1>FiscalSentry Monthly Financial Ledger</h1>
+        <p style="color: #64748b; font-size: 9.5pt; margin-top: 0;">Period: ${monthLabel} • Certified via Google Gemini 3.7 Flash AI • Generated on ${new Date().toLocaleDateString()}</p>
+        
+        <div class="total-box">
+          <table style="width: 100%; border: none;">
+            <tr>
+              <td style="border: none; font-size: 10pt;"><strong>Total Billed / Incurred:</strong> ${formatCurrency(totalBilled)}</td>
+              <td style="border: none; font-size: 11pt; color: #047857;"><strong>Disputed Savings:</strong> +${formatCurrency(totalRecovery)}</td>
+              <td style="border: none; font-size: 10pt;"><strong>Verified Statements:</strong> ${monthAudits.length}</td>
+            </tr>
+          </table>
+        </div>
+
+        <h2>Itemized Statements & Audited Liabilities</h2>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 12%;">Date</th>
+              <th style="width: 36%;">Statement / Vendor</th>
+              <th style="width: 16%;">Category</th>
+              <th style="width: 12%; text-align: right;">Billed</th>
+              <th style="width: 14%; text-align: right;">Savings</th>
+              <th style="width: 10%;">Risk</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml || '<tr><td colspan="6" style="text-align:center; padding:10px;">No statements recorded in this period.</td></tr>'}
+          </tbody>
+        </table>
+
+        <hr style="margin-top: 24px; border: 0; border-top: 1px solid #cbd5e1;" />
+        <p style="font-size: 8.5pt; color: #94a3b8; text-align: center; margin-top: 6px;">
+          FiscalSentry Void Autonomous Intelligence • Zero-Knowledge Encrypted Paperwork Sentry
+        </p>
       </div>
-      <h2>Audited Statements & Transactions</h2>
-      ${auditsHtml || '<p>No audited statements recorded for this month.</p>'}
     </body>
     </html>
   `;

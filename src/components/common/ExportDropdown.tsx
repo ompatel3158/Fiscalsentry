@@ -12,6 +12,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { AuditResult } from '@/lib/types';
 import {
+  exportAuditToPDF,
+  exportMonthlyLedgerToPDF,
   exportAuditToWord,
   exportAuditToExcel,
   exportAuditToCSV,
@@ -58,10 +60,20 @@ export function ExportDropdown({
     setIsOpen(false);
     try {
       if (format === 'pdf') {
-        if (onOpenPDF) onOpenPDF();
-        else window.print();
-        toast.success('Opening Printable PDF Dossier...');
-        return;
+        if (monthlyAudits && monthLabel) {
+          exportMonthlyLedgerToPDF(monthlyAudits, monthLabel);
+          toast.success(`Exported ${monthLabel} Financial Statement (PDF)`);
+          return;
+        }
+        if (audit) {
+          if (onOpenPDF) {
+            onOpenPDF();
+          } else {
+            exportAuditToPDF(audit);
+          }
+          toast.success('Generated Signature-Ready PDF Statement');
+          return;
+        }
       }
       if (monthlyAudits && monthLabel) {
         if (format === 'word') {

@@ -250,3 +250,140 @@ export function generatePurchaseOrderPDF(audit: AuditResult): jsPDF {
 
   return doc;
 }
+
+export function generateMonthlyLedgerPDF(monthAudits: AuditResult[], monthLabel: string): jsPDF {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'letter',
+  });
+
+  const totalBilled = monthAudits.reduce((acc, a) => acc + (a.totalBilledAmount || 0), 0);
+  const totalRecovery = monthAudits.reduce((acc, a) => acc + (a.potentialRecoveryAmount || 0), 0);
+
+  // 1. Header Banner
+  doc.setFillColor(15, 23, 42);
+  doc.rect(0, 0, 612, 60, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.text('🛡️ FISCALSENTRY | MONTHLY FINANCIAL LEDGER & AUDIT', 36, 35);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`STATEMENT PERIOD: ${monthLabel.toUpperCase()} • GENERATED ON ${new Date().toLocaleDateString()}`, 36, 48);
+
+  // 2. Summary KPI Ribbon
+  let y = 80;
+  doc.setFillColor(241, 245, 249);
+  doc.roundedRect(36, y, 540, 50, 6, 6, 'F');
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(36, y, 540, 50, 6, 6, 'S');
+
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TOTAL INCURRED / BILLED', 50, y + 20);
+  doc.text('STATUTORY DISPUTED SAVINGS', 220, y + 20);
+  doc.text('VERIFIED STATEMENTS', 420, y + 20);
+
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(13);
+  doc.text(`$${totalBilled.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 50, y + 38);
+
+  doc.setTextColor(16, 185, 129);
+  doc.text(`+$${totalRecovery.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 220, y + 38);
+
+  doc.setTextColor(15, 23, 42);
+  doc.text(`${monthAudits.length} Audits`, 420, y + 38);
+
+  y += 70;
+
+  // 3. Section Title
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text('ITEMIZED MONTHLY STATEMENTS & LIABILITIES', 36, y);
+  y += 12;
+
+  // 4. Table Header
+  doc.setFillColor(30, 41, 59);
+  doc.rect(36, y, 540, 20, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('DATE', 42, y + 14);
+  doc.text('STATEMENT / VENDOR', 110, y + 14);
+  doc.text('CATEGORY', 310, y + 14);
+  doc.text('BILLED', 410, y + 14);
+  doc.text('SAVINGS', 475, y + 14);
+  doc.text('RISK', 540, y + 14);
+
+  y += 20;
+
+  // 5. Table Rows
+  monthAudits.forEach((audit, idx) => {
+    if (y > 720) {
+      doc.addPage();
+      y = 40;
+      // Repeat header on new page
+      doc.setFillColor(30, 41, 59);
+      doc.rect(36, y, 540, 20, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.text('DATE', 42, y + 14);
+      doc.text('STATEMENT / VENDOR', 110, y + 14);
+      doc.text('CATEGORY', 310, y + 14);
+      doc.text('BILLED', 410, y + 14);
+      doc.text('SAVINGS', 475, y + 14);
+      doc.text('RISK', 540, y + 14);
+      y += 20;
+    }
+
+    doc.setFillColor(idx % 2 === 0 ? 248 : 255, idx % 2 === 0 ? 250 : 255, idx % 2 === 0 ? 252 : 255);
+    doc.rect(36, y, 540, 26, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.line(36, y + 26, 576, y + 26);
+
+    doc.setTextColor(71, 85, 105);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const dateStr = audit.documentDate || audit.createdAt?.split('T')[0] || '';
+    doc.text(dateStr, 42, y + 15);
+
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('helvetica', 'bold');
+    const titleText = doc.splitTextToSize(audit.title || audit.providerOrVendor, 190);
+    doc.text(titleText[0] || '', 110, y + 15);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(audit.financialCategory || audit.category || 'General', 310, y + 15);
+
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`$${(audit.totalBilledAmount || 0).toFixed(2)}`, 410, y + 15);
+
+    doc.setTextColor(16, 185, 129);
+    doc.text(`+$${(audit.potentialRecoveryAmount || 0).toFixed(2)}`, 475, y + 15);
+
+    doc.setTextColor(audit.riskLevel === 'critical' ? 225 : 71, audit.riskLevel === 'critical' ? 29 : 85, audit.riskLevel === 'critical' ? 72 : 105);
+    doc.text((audit.riskLevel || 'med').substring(0, 4).toUpperCase(), 540, y + 15);
+
+    y += 26;
+  });
+
+  // Footer note
+  y += 25;
+  if (y > 740) {
+    doc.addPage();
+    y = 50;
+  }
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.text('Certified by FiscalSentry Void Autonomous Intelligence • End-to-end encrypted financial ledger audit.', 36, y);
+
+  return doc;
+}
