@@ -18,6 +18,7 @@ import {
   fetchFinancialEmailsFromGmail,
   fetchFinancialEmailsTiered,
   SyncTier,
+  ExtractedEmail,
   extractBankTransactionFromText,
   isPromotionalOrMarketingEmail,
 } from '@/lib/gmail';
@@ -599,10 +600,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               });
             }
 
-            const activeModel = userProfile?.preferredModel || 'gemini-3.1-flash-lite';
-            
-            // Execute ONE SINGLE GEMINI API CALL for the entire batch
-            const batchAudit = await auditBatchFinancialEmails(unAuditedEmails, activeModel);
+            const activeModel = userProfile?.preferredModel || 'gemini-3.7-flash';
+
+            // Partition unAuditedEmails by calendar month (YYYY-MM) so 1-year and multi-month syncs populate distinct monthly statements
+            const emailsByMonth: Record<string, ExtractedEmail[]> = {};
+            unAuditedEmails.forEach((email) => {
+              const d = email.date ? new Date(email.date) : new Date();
+              const validDate = isNaN(d.getTime()) ? new Date() : d;
+              const monthKey = `${validDate.getFullYear()}-${String(validDate.getMonth() + 1).padStart(2, '0')}`;
+              if (!emailsByMonth[monthKey]) {
+                emailsByMonth[monthKey] = [];
+              }
+              emailsByMonth[monthKey].push(email);
+            });
+
+            const monthKeys = Object.keys(emailsByMonth).sort((a, b) => b.localeCompare(a));
+            const createdAudits: AuditResult[] = [];
+            let totalTransactionCount = 0;
+            let totalRecoveryCount = 0;
+
+            for (const mKey of monthKeys) {
+              const monthEmails = emailsByMonth[mKey];
+              const monthAudit = await auditBatchFinancialEmails(monthEmails, activeModel);
+              if (monthAudit) {
+                const d = new Date(`${mKey}-01T00:00:00Z`);
+                const monthName = isNaN(d.getTime()) ? mKey : d.toLocaleString('default', { month: 'long', year: 'numeric' });
+                monthAudit.id = `audit-batch-${mKey}-${Date.now()}`;
+                monthAudit.documentDate = `${mKey}-15`;
+                monthAudit.title = `Voidy AI Ledger: ${monthName} (${monthAudit.lineItems?.length || 1} Transactions)`;
+                monthAudit.emailIds = monthEmails.map((e) => e.id);
+                createdAudits.push(monthAudit);
+
+                totalTransactionCount += monthAudit.lineItems?.length || 1;
+                totalRecoveryCount += monthAudit.potentialRecoveryAmount || 0;
+
+                if (user?.uid) {
+                  saveUserAuditToFirestore(user.uid, monthAudit);
+                }
+              }
+            }
 
             // Record all processed email IDs so they aren't re-audited unnecessarily
             const processedIds = unAuditedEmails.map((e) => e.id);
@@ -611,12 +647,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               localStorage.setItem('fs_audited_email_ids', JSON.stringify(updatedAuditedIds));
             }
 
-            if (batchAudit) {
-              batchAudit.emailIds = processedIds;
-
-              // Add the single consolidated hourly audit to the ledger
+            if (createdAudits.length > 0) {
+              // Add the consolidated monthly audits to the ledger
               setAllAudits((prev) => {
-                const updated = [batchAudit, ...prev.filter((a) => a.id !== batchAudit.id)];
+                const existingMap = new Map(prev.map((a) => [a.id, a]));
+                createdAudits.forEach((a) => existingMap.set(a.id, a));
+                const updated = Array.from(existingMap.values()).sort(
+                  (a, b) => new Date(b.documentDate).getTime() - new Date(a.documentDate).getTime()
+                );
                 if (typeof window !== 'undefined') {
                   localStorage.setItem('fs_cached_audits', JSON.stringify(updated));
                 }
@@ -626,17 +664,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               // Keep activeAudit null so Total Dashboard Overview remains visible with updated metrics
               setActiveAudit(null);
 
-              if (user?.uid) {
-                saveUserAuditToFirestore(user.uid, batchAudit);
-              }
-
-              const transactionCount = batchAudit.lineItems?.length || 1;
-              const recoveryAmount = batchAudit.potentialRecoveryAmount || 0;
-
               setSentryConfig((prev) => ({
                 ...prev,
-                totalDocumentsProcessed: prev.totalDocumentsProcessed + transactionCount,
-                totalDisputedAmount: prev.totalDisputedAmount + recoveryAmount,
+                totalDocumentsProcessed: prev.totalDocumentsProcessed + totalTransactionCount,
+                totalDisputedAmount: prev.totalDisputedAmount + totalRecoveryCount,
               }));
 
               setSentryLogs((prev) => [
@@ -645,14 +676,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   timestamp: new Date().toLocaleTimeString(),
                   source: 'gmail',
                   status: 'success',
-                  message: `Voidy AI Batch Sentry: Audited ${unAuditedEmails.length} emails into 1 consolidated digest (${transactionCount} transactions).`,
+                  message: `Voidy AI Ledger Synced: Audited ${unAuditedEmails.length} emails into ${createdAudits.length} monthly statements (${totalTransactionCount} transactions across ${tierLabel}).`,
                 },
                 ...prev.slice(0, 15),
               ]);
 
               toast.success('Voidy AI Financial Ingestion Complete!', {
                 id: 'sentry-scan',
-                description: `Processed ${unAuditedEmails.length} emails (${transactionCount} verified transactions synchronized).`,
+                description: `Processed ${unAuditedEmails.length} emails (${totalTransactionCount} verified transactions synchronized).`,
               });
             } else {
               setSentryLogs((prev) => [
