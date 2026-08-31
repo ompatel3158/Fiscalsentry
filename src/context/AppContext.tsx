@@ -58,7 +58,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const { user, userProfile, googleAccessToken, connectGoogleWorkspace } = useAuth();
+  const { user, userProfile, googleAccessToken, connectGoogleWorkspace, refreshGoogleWorkspaceToken } = useAuth();
   
   // 1. Initial view: show Welcome page on first-time visit, otherwise Dashboard
   const [currentView, setCurrentView] = useState<'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings'>(() => {
@@ -489,6 +489,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      const tokenSavedAt = userProfile?.googleTokenSavedAt || (typeof window !== 'undefined' ? Number(localStorage.getItem('fs_google_token_saved_at') || '0') : 0);
+      const isDueFor45MinRefresh = !tokenSavedAt || (Date.now() - tokenSavedAt > 45 * 60 * 1000);
+
       let activeToken =
         customAccessToken ||
         googleAccessToken ||
@@ -497,7 +500,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ? localStorage.getItem('fs_google_token') || sessionStorage.getItem('fs_google_token')
           : null);
 
-      // If no token is found and not in sandbox demo, prompt 1-click Google Workspace connection
+      // Proactively rotate token at 45-minute mark silently
+      if ((!activeToken || isDueFor45MinRefresh) && !isSandboxDemoActive) {
+        const silentToken = await refreshGoogleWorkspaceToken(true);
+        if (silentToken) {
+          activeToken = silentToken;
+        }
+      }
+
+      // If still no token is found and not in sandbox demo, prompt 1-click Google Workspace connection
       if (!activeToken && !isSandboxDemoActive) {
         if (!isSilent) {
           toast.info('Google Workspace Token Required', {

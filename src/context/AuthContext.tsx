@@ -44,6 +44,7 @@ interface AuthContextType {
   closeAuthModal: () => void;
   signInWithGoogle: () => Promise<string | null>;
   connectGoogleWorkspace: () => Promise<string | null>;
+  refreshGoogleWorkspaceToken: (isSilent?: boolean) => Promise<string | null>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (name: string, email: string, pass: string, acceptedTerms: boolean) => Promise<void>;
   linkAccounts: (password: string) => Promise<void>;
@@ -82,8 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isGoogleTokenExpired = React.useMemo(() => {
     if (!googleAccessToken) return true;
     if (!googleTokenSavedAt) return false;
-    // Google tokens strictly expire at 60 mins (3600s). Warn/expire at 50 mins (3000s)
-    return Date.now() - googleTokenSavedAt > 3000 * 1000;
+    // Strictly rotate before 45 minutes (2700s) to prevent 1-hour Google OAuth expiration
+    return Date.now() - googleTokenSavedAt > 2700 * 1000;
   }, [googleAccessToken, googleTokenSavedAt]);
 
   const closeAuthModal = () => {
@@ -232,8 +233,96 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Silent 45-Minute Token Refresher via Cloud Functions
+  const refreshGoogleWorkspaceToken = async (isSilent: boolean = false): Promise<string | null> => {
+    const rToken =
+      userProfile?.googleRefreshToken ||
+      (typeof window !== 'undefined' ? localStorage.getItem('fs_google_refresh_token') : null);
+
+    if (rToken) {
+      try {
+        const cloudFnUrl = 'https://sentrypollhttp-af4rmeacda-uc.a.run.app';
+        const res = await fetch(cloudFnUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'refresh-token',
+            refreshToken: rToken,
+            uid: user?.uid,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.accessToken) {
+            const now = Date.now();
+            setGoogleAccessToken(data.accessToken);
+            setGoogleTokenSavedAt(now);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('fs_google_token', data.accessToken);
+              sessionStorage.setItem('fs_google_token', data.accessToken);
+              localStorage.setItem('fs_google_token_saved_at', now.toString());
+            }
+            if (user) {
+              await syncUserProfile(user, {
+                googleAccessToken: data.accessToken,
+                googleTokenSavedAt: now,
+              });
+            }
+            if (!isSilent) {
+              toast.success('Google Workspace Token Refreshed (45-min cycle)');
+            }
+            return data.accessToken;
+          }
+        }
+      } catch (err) {
+        console.warn('[Silent Token Refresh Error]:', err);
+      }
+    }
+
+    // If silent refresh is not available and non-silent request, re-authenticate via Google popup
+    if (!isSilent) {
+      return await signInWithGoogle();
+    }
+    return null;
+  };
+
+  // Automated 45-Minute Silent Token Rotation Timer & Tab Focus Watcher
+  useEffect(() => {
+    if (!user) return;
+
+    const perform45MinRefresh = async () => {
+      const savedAt = googleTokenSavedAt || Number(localStorage.getItem('fs_google_token_saved_at') || '0');
+      const now = Date.now();
+      // Rotate before 45 minutes (2,700,000 ms) so the user never hits the 1-hour expiration
+      if (savedAt && now - savedAt >= 45 * 60 * 1000) {
+        console.log('[Auth] 45 minutes elapsed, silently refreshing Google Workspace token...');
+        await refreshGoogleWorkspaceToken(true);
+      }
+    };
+
+    perform45MinRefresh();
+
+    const interval = setInterval(perform45MinRefresh, 2 * 60 * 1000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        perform45MinRefresh();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user, googleTokenSavedAt, userProfile?.googleRefreshToken]);
+
   // Explicit helper to connect or refresh Google Workspace OAuth
   const connectGoogleWorkspace = async (): Promise<string | null> => {
+    // Try silent refresh first before opening popup
+    const silent = await refreshGoogleWorkspaceToken(true);
+    if (silent) return silent;
     return await signInWithGoogle();
   };
 
@@ -367,6 +456,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         closeAuthModal,
         signInWithGoogle,
         connectGoogleWorkspace,
+        refreshGoogleWorkspaceToken,
         signInWithEmail,
         signUpWithEmail,
         linkAccounts,

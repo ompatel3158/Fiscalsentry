@@ -177,13 +177,67 @@ export const sentryScheduledWorker = onSchedule(
 );
 
 /**
- * 2. 🌐 Firebase HTTPS Callable Function: Manual Direct Sentry Poll
+ * 2. 🌐 Firebase HTTPS Callable Function: Manual Direct Sentry Poll & 45-Minute Token Refresh
  */
 export const sentryPollHttp = onRequest({ cors: true, invoker: 'public' }, async (req, res) => {
-  res.json({
-    success: true,
-    engine: 'Firebase Cloud Functions (2nd Gen)',
-    message: 'Autonomous Sentry Cloud Endpoint is online.',
-    timestamp: new Date().toISOString(),
-  });
+  if (req.method === 'OPTIONS') {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.status(204).send('');
+    return;
+  }
+
+  res.set('Access-Control-Allow-Origin', '*');
+
+  try {
+    const body = req.body || {};
+    const action = body.action || req.query.action;
+
+    // Action 1: Silent 45-Minute Token Refresh
+    if (action === 'refresh-token') {
+      const refreshToken = body.refreshToken || req.query.refreshToken;
+      const uid = body.uid || req.query.uid;
+
+      if (!refreshToken) {
+        res.status(400).json({ success: false, error: 'Missing refreshToken parameter' });
+        return;
+      }
+
+      const freshToken = await refreshGoogleAccessToken(String(refreshToken));
+      if (!freshToken) {
+        res.status(401).json({ success: false, error: 'Failed to refresh Google OAuth token. Token may be revoked.' });
+        return;
+      }
+
+      const now = Date.now();
+      if (uid) {
+        const db = getDb();
+        await db.collection('users').doc(String(uid)).update({
+          googleAccessToken: freshToken,
+          googleTokenSavedAt: now,
+          updatedAt: new Date().toISOString(),
+        }).catch(() => {});
+      }
+
+      res.json({
+        success: true,
+        accessToken: freshToken,
+        savedAt: now,
+        expiresIn: 3600,
+        refreshedAt: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Default: Health / Status
+    res.json({
+      success: true,
+      engine: 'Firebase Cloud Functions (2nd Gen)',
+      message: 'Autonomous Sentry Cloud Endpoint is online & ready for 45-min token rotation.',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
