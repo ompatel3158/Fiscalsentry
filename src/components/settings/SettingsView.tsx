@@ -504,6 +504,49 @@ export function SettingsView() {
           </div>
         )}
       </section>
+
+      {/* 6. Legal & Governance Section */}
+      <section className="p-6 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+            <Shield className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-[#1d1d1f] dark:text-white">
+              Legal, Compliance &amp; Governance
+            </h2>
+            <p className="text-[11px] text-[#86868b]">
+              Statutory disclosures, Google API Limited Use compliance, and Zero-Knowledge security
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          <a
+            href="/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-3.5 rounded-2xl bg-black/[0.015] dark:bg-white/[0.02] hover:bg-black/[0.03] dark:hover:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between text-xs font-semibold text-[#1d1d1f] dark:text-white transition-all group"
+          >
+            <span>Terms and Conditions</span>
+            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono group-hover:translate-x-0.5 transition-transform">
+              View Legal Terms →
+            </span>
+          </a>
+
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-3.5 rounded-2xl bg-black/[0.015] dark:bg-white/[0.02] hover:bg-black/[0.03] dark:hover:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between text-xs font-semibold text-[#1d1d1f] dark:text-white transition-all group"
+          >
+            <span>Privacy Policy &amp; Limited Use</span>
+            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono group-hover:translate-x-0.5 transition-transform">
+              View Privacy Policy →
+            </span>
+          </a>
+        </div>
+      </section>
     </div>
   );
 }

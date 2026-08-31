@@ -99,12 +99,21 @@ export function TermsModal({ isOpen, onClose }: TermsModalProps) {
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02] flex justify-end">
+          <div className="p-4 border-t border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02] flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3 text-[11px] text-[#86868b]">
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2">
+                Full Terms & Conditions
+              </a>
+              <span>•</span>
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-emerald-600 dark:hover:text-emerald-400 underline underline-offset-2">
+                Full Privacy Policy
+              </a>
+            </div>
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-black dark:bg-white hover:bg-black/90 dark:hover:bg-white/90 text-white dark:text-black text-xs font-bold transition-all active:scale-[0.97]"
+              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-black dark:bg-white hover:bg-black/90 dark:hover:bg-white/90 text-white dark:text-black text-xs font-bold transition-all active:scale-[0.97]"
             >
-              I Understand & Agree
+              I Understand &amp; Agree
             </button>
           </div>
         </motion.div>
