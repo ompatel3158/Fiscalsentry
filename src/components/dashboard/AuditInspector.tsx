@@ -18,6 +18,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ExportDropdown } from '@/components/common/ExportDropdown';
 
 export function AuditInspector() {
   const { activeAudit, setActiveAudit, setIsPDFModalOpen, setPdfAuditTarget } = useApp();
@@ -113,17 +114,16 @@ export function AuditInspector() {
             </div>
           </div>
 
-          {/* Quick PDF Packet Generator */}
-          <button
-            onClick={() => {
+          {/* Multi-Format Export Dropdown */}
+          <ExportDropdown
+            audit={activeAudit}
+            onOpenPDF={() => {
               setPdfAuditTarget(activeAudit);
               setIsPDFModalOpen(true);
             }}
-            className="px-3.5 py-2 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:opacity-90 text-xs font-bold transition-all active:scale-[0.97] self-start sm:self-auto flex items-center gap-1.5 shadow-xs"
-          >
-            <FileText className="w-3.5 h-3.5" />
-            Export Packet (PDF)
-          </button>
+            buttonLabel="Export Dossier"
+            variant="primary"
+          />
         </div>
 
         {/* Metric Cards Ribbon */}

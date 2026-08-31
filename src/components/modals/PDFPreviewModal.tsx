@@ -6,6 +6,7 @@ import { generateDisputeLetterPDF, generatePurchaseOrderPDF } from '@/lib/pdf-ge
 import { X, Download, FileText, CheckCircle2, ShieldCheck, Scale } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { ExportDropdown } from '@/components/common/ExportDropdown';
 
 export function PDFPreviewModal() {
   const { isPDFModalOpen, setIsPDFModalOpen, pdfAuditTarget } = useApp();
@@ -55,6 +56,13 @@ export function PDFPreviewModal() {
             </div>
 
             <div className="flex items-center gap-2">
+              <ExportDropdown
+                audit={pdfAuditTarget}
+                onOpenPDF={handleDownloadPDF}
+                buttonLabel="Export Formats"
+                variant="secondary"
+              />
+
               <button
                 onClick={handleDownloadPDF}
                 className="px-4 py-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-emerald-500/20 transition-all duration-150 active:scale-[0.97]"

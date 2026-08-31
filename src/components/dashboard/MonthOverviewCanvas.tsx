@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { ExportDropdown } from '@/components/common/ExportDropdown';
 
 interface MonthOverviewCanvasProps {
   monthKey: string; // e.g. '2026-08'
@@ -160,13 +161,12 @@ export function MonthOverviewCanvas({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleExportCSV}
-            className="px-3.5 py-2 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:opacity-90 text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.97]"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export Month CSV
-          </button>
+          <ExportDropdown
+            monthlyAudits={monthAudits}
+            monthLabel={monthLabel}
+            buttonLabel="Export Month Ledger"
+            variant="primary"
+          />
         </div>
       </div>
 

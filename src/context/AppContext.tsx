@@ -61,28 +61,30 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const { user, userProfile, googleAccessToken, connectGoogleWorkspace, refreshGoogleWorkspaceToken } = useAuth();
   
-  // 1. Initial view: show Welcome page on first-time visit, otherwise Dashboard
-  const [currentView, setCurrentView] = useState<'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings'>(() => {
+  // 1. Initial view state
+  const [currentView, setCurrentView] = useState<'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings'>('dashboard');
+  
+  // 2. Audits state
+  const [allAudits, setAllAudits] = useState<AuditResult[]>([]);
+
+  // Hydrate client state from localStorage safely on mount
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const seen = localStorage.getItem('fs_has_seen_welcome');
-      if (!seen) return 'welcome';
-    }
-    return 'dashboard';
-  });
-  
-  // 2. Initialize allAudits from localStorage immediately on startup
-  const [allAudits, setAllAudits] = useState<AuditResult[]>(() => {
-    if (typeof window !== 'undefined') {
+      if (!seen) {
+        setCurrentView('welcome');
+      }
       try {
         const cached = localStorage.getItem('fs_cached_audits');
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAllAudits(parsed);
+          }
         }
       } catch (_) {}
     }
-    return [];
-  });
+  }, []);
 
   // 3. Initialize activeAudit as null by default so user is always greeted with the Total Dashboard Overview
   const [activeAudit, setActiveAudit] = useState<AuditResult | null>(null);

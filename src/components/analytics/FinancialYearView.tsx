@@ -23,6 +23,7 @@ import {
   Search,
 } from 'lucide-react';
 import { GroupedAuditList } from '@/components/dashboard/GroupedAuditList';
+import { ExportDropdown } from '@/components/common/ExportDropdown';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -272,14 +273,13 @@ export function FinancialYearView() {
             ))}
           </div>
 
-          {/* Export CSV Button */}
-          <button
-            onClick={handleExportCSV}
-            className="px-3.5 py-2 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:opacity-90 text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.97]"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export CSV
-          </button>
+          {/* Multi-Format Export Dropdown */}
+          <ExportDropdown
+            monthlyAudits={filteredAudits}
+            monthLabel={selectedFY}
+            buttonLabel="Export Ledger"
+            variant="primary"
+          />
         </div>
       </div>
 
