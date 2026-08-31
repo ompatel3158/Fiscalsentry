@@ -152,9 +152,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Sync to localStorage whenever sessions, activeSessionId, or messagesMap change (scoped by user.uid)
+  // Sync to localStorage whenever sessions or messagesMap change (scoped by user.uid)
   useEffect(() => {
-    if (typeof window !== 'undefined' && user?.uid) {
+    if (typeof window !== 'undefined' && user?.uid && sessions.length > 0) {
       try {
         localStorage.setItem(`fs_chat_sessions_${user.uid}`, JSON.stringify(sessions));
         localStorage.setItem(`fs_chat_messages_map_${user.uid}`, JSON.stringify(messagesMap));
@@ -164,36 +164,49 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, [sessions, messagesMap, user?.uid]);
 
-  // Load chat history when user signs in
+  // Load chat history reliably when user signs in
   useEffect(() => {
-    if (user?.uid) {
-      // 1. First check user-scoped local cache
-      if (typeof window !== 'undefined') {
-        try {
-          const cachedSessions = localStorage.getItem(`fs_chat_sessions_${user.uid}`);
-          const cachedMap = localStorage.getItem(`fs_chat_messages_map_${user.uid}`);
-          if (cachedSessions && cachedMap) {
-            const parsedS = JSON.parse(cachedSessions);
-            const parsedM = JSON.parse(cachedMap);
-            if (Array.isArray(parsedS) && parsedS.length > 0) {
-              setSessions(parsedS);
-              setMessagesMap(parsedM);
-            }
-          }
-        } catch (_) {}
-      }
+    if (!user?.uid) return;
 
-      // 2. Fetch latest from Firestore
-      getUserChatSessionsFromFirestore(user.uid).then(({ sessions: firestoreSessions, messagesMap: firestoreMap }) => {
-        if (firestoreSessions && firestoreSessions.length > 0) {
-          setSessions(firestoreSessions);
-          setMessagesMap(firestoreMap);
-          if (!firestoreSessions.some((s) => s.id === activeSessionId)) {
-            setActiveSessionId(firestoreSessions[0].id);
+    // 1. Instantly hydrate from user-scoped local cache
+    if (typeof window !== 'undefined') {
+      try {
+        const cachedSessions = localStorage.getItem(`fs_chat_sessions_${user.uid}`);
+        const cachedMap = localStorage.getItem(`fs_chat_messages_map_${user.uid}`);
+        if (cachedSessions && cachedMap) {
+          const parsedS = JSON.parse(cachedSessions);
+          const parsedM = JSON.parse(cachedMap);
+          if (Array.isArray(parsedS) && parsedS.length > 0) {
+            setSessions(parsedS);
+            setMessagesMap(parsedM);
+            setActiveSessionId(parsedS[0].id);
           }
         }
-      });
+      } catch (_) {}
     }
+
+    // 2. Fetch latest from Firestore & update state
+    getUserChatSessionsFromFirestore(user.uid).then(({ sessions: firestoreSessions, messagesMap: firestoreMap }) => {
+      if (firestoreSessions && firestoreSessions.length > 0) {
+        // Sort sessions by most recently updated
+        const sorted = [...firestoreSessions].sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+        setSessions(sorted);
+        setMessagesMap((prev) => ({
+          ...prev,
+          ...firestoreMap,
+        }));
+        setActiveSessionId(sorted[0].id);
+
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`fs_chat_sessions_${user.uid}`, JSON.stringify(sorted));
+            localStorage.setItem(`fs_chat_messages_map_${user.uid}`, JSON.stringify(firestoreMap));
+          } catch (_) {}
+        }
+      }
+    });
   }, [user?.uid]);
 
   const createNewSession = (): string => {
@@ -383,29 +396,33 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         [activeSessionId]: finalMessages,
       }));
 
-      // Update session title & preview if it's the first user message
-      let updatedSession = sessions.find((s) => s.id === activeSessionId);
-      if (currentHistory.filter((m) => m.role === 'user').length === 1) {
-        const smartTitle = content.length > 28 ? content.substring(0, 28) + '...' : content;
-        setSessions((prev) =>
-          prev.map((s) => {
-            if (s.id === activeSessionId) {
-              updatedSession = {
-                ...s,
-                title: smartTitle,
-                previewText: responseText.substring(0, 60) + '...',
-                updatedAt: new Date().toISOString(),
-              };
-              return updatedSession;
-            }
-            return s;
-          })
-        );
-      }
+      // Update or create session object with latest preview and timestamp
+      const existingSession = sessions.find((s) => s.id === activeSessionId);
+      const isFirstMessage = currentHistory.filter((m) => m.role === 'user').length <= 1;
+      const smartTitle = isFirstMessage
+        ? (content.length > 28 ? content.substring(0, 28) + '...' : content || 'Financial Consultation')
+        : (existingSession?.title || 'Financial Consultation');
 
-      // Persist to Firestore
-      if (user?.uid && updatedSession) {
-        saveChatSessionToFirestore(user.uid, updatedSession, finalMessages);
+      const sessionToSave: ChatSession = {
+        id: activeSessionId,
+        title: smartTitle,
+        previewText: responseText.substring(0, 60) + '...',
+        createdAt: existingSession?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isPinned: existingSession?.isPinned || false,
+      };
+
+      setSessions((prev) => {
+        const exists = prev.some((s) => s.id === activeSessionId);
+        if (exists) {
+          return prev.map((s) => (s.id === activeSessionId ? sessionToSave : s));
+        }
+        return [sessionToSave, ...prev];
+      });
+
+      // Persist to Firestore and local cache
+      if (user?.uid) {
+        saveChatSessionToFirestore(user.uid, sessionToSave, finalMessages);
       }
 
       if (generatedAudit) {

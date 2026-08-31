@@ -440,18 +440,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem('fs_last_poll_timestamp');
         localStorage.removeItem('fs_voidy_rate_limit_v5h');
 
-        if (currentUid) {
-          localStorage.removeItem(`fs_cached_audits_${currentUid}`);
-          localStorage.removeItem(`fs_chat_sessions_${currentUid}`);
-          localStorage.removeItem(`fs_chat_messages_map_${currentUid}`);
-        }
-
-        // Dispatch logout event across the app
+        // Dispatch logout event across the app so in-memory state is wiped immediately
         window.dispatchEvent(new Event('fs:auth:logout'));
       } catch (_) {}
     }
     toast.info('Signed out of FiscalSentry', {
-      description: 'Your private financial ledger and session data have been cleared from this device.',
+      description: 'Your session has been securely ended.',
     });
   };
 
