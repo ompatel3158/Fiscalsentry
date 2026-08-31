@@ -83,9 +83,10 @@ export function ChatArea() {
               onChange={(e) => handleModelChange(e.target.value)}
               className="text-[11px] bg-black/5 dark:bg-[#18181b] text-emerald-600 dark:text-emerald-400 font-bold rounded-lg px-2 py-1 focus:outline-none cursor-pointer border border-black/[0.06] dark:border-white/[0.08] shadow-2xs"
             >
-              <option value="gemini-3.1-flash-lite">⚡ Gemini 3.1 Flash Lite</option>
-              <option value="gemini-3.5-flash-lite">⚡ Gemini 3.5 Flash Lite</option>
+              <option value="gemini-3.7-flash">✨ Gemini 3.7 Flash</option>
               <option value="gemini-3.6-flash">🧠 Gemini 3.6 Flash</option>
+              <option value="gemini-3.5-flash">⚡ Gemini 3.5 Flash</option>
+              <option value="gemini-3.5-flash-lite">🚀 Gemini 3.5 Flash Lite</option>
             </select>
           </div>
 

@@ -130,7 +130,7 @@ export function SettingsView() {
             Control Center & Customization
           </h1>
           <p className="text-xs text-[#86868b] mt-1">
-            Configure Gemini 3.1 AI model engine, Google Workspace permissions, 14-day encryption rotation, and webhooks.
+            Configure Gemini 3.7 Flash AI model engine, Google Workspace permissions, 14-day encryption rotation, and webhooks.
           </p>
         </div>
 

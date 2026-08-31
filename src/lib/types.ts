@@ -111,6 +111,12 @@ export interface ActionItemPayload {
   estimatedRecoveryAmount?: number;
   payload: Record<string, any>;
   resultData?: Record<string, any>;
+  executionResult?: {
+    executedAt?: string;
+    externalUrl?: string;
+    link?: string;
+    [key: string]: any;
+  };
   executedAt?: string;
 }
 

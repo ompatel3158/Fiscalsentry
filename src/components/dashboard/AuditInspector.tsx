@@ -152,7 +152,7 @@ export function AuditInspector() {
 
         {/* Executive Summary */}
         <div className="p-3.5 rounded-2xl bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 text-xs leading-relaxed text-[#1d1d1f] dark:text-[#f5f5f7]">
-          <strong>Gemini 3.1 Analysis:</strong> {activeAudit.summary}
+          <strong>Gemini 3.7 Flash Analysis:</strong> {activeAudit.summary}
         </div>
       </div>
 
@@ -253,7 +253,7 @@ export function AuditInspector() {
                                 <Scale className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                                 <div>
                                   <span className="font-bold text-[#1d1d1f] dark:text-white">
-                                    Gemini 3.1 Statutory Audit & Compliance Precedent:
+                                    Gemini 3.7 Flash Statutory Audit & Compliance Precedent:
                                   </span>
                                   <p className="text-[#86868b] dark:text-slate-300 mt-1 leading-relaxed">
                                     {item.reasoning}

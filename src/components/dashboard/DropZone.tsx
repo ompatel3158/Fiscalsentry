@@ -16,8 +16,8 @@ export function DropZone() {
 
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
-    const activeModel = userProfile?.preferredModel || 'gemini-3.1-flash-lite';
-    toast.loading(`Gemini 3.1 analyzing ${file.name}...`, { id: 'upload-audit' });
+    const activeModel = userProfile?.preferredModel || 'gemini-3.7-flash';
+    toast.loading(`Gemini 3.7 Flash analyzing ${file.name}...`, { id: 'upload-audit' });
 
     try {
       const reader = new FileReader();
@@ -93,7 +93,7 @@ export function DropZone() {
           Multimodal Document Dropzone
         </h3>
         <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full font-bold">
-          Gemini 3.1 Flash Lite
+          Gemini 3.7 Flash
         </span>
       </div>
 
@@ -127,7 +127,7 @@ export function DropZone() {
           </div>
           <div>
             <div className="text-xs font-bold text-[#1d1d1f] dark:text-white">
-              {isUploading ? 'Gemini 3.1 Analyzing Document...' : 'Drop statement, bill, or quote here'}
+              {isUploading ? 'Gemini 3.7 Flash Analyzing Document...' : 'Drop statement, bill, or quote here'}
             </div>
             <div className="text-[11px] text-[#86868b] mt-0.5">
               Supports PDF, PNG, JPG, CSV statements with zero-knowledge 14-day vault encryption

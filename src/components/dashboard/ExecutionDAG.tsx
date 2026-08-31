@@ -84,7 +84,7 @@ export function ExecutionDAG() {
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                 <Sparkles className="w-3 h-3" />
-                Stage 2 • Gemini 2.0 Brain
+                Stage 2 • Gemini 3.7 Flash Brain
               </span>
               <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
                 Audited & Benchmarked

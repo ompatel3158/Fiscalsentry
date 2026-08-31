@@ -93,7 +93,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           id: 'msg-init-1',
           role: 'assistant',
           content:
-            '🛡️ **FiscalSentry Agent Connected**\n\nI am your autonomous financial defense and paperwork reasoning engine powered by **Gemini 3.1 Flash Lite**. You can ask me questions about medical bill errors, vendor RFP comparisons, clean energy grants, or upload any document/image for instant multimodal auditing.',
+            '🛡️ **FiscalSentry Agent Connected**\n\nI am your autonomous financial defense and paperwork reasoning engine powered by **Gemini 3.7 Flash**. You can ask me questions about medical bill errors, vendor RFP comparisons, clean energy grants, or upload any document/image for instant multimodal auditing.',
           createdAt: new Date().toISOString(),
         },
       ],
@@ -148,7 +148,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         id: 'msg-init-' + newId,
         role: 'assistant',
         content:
-          '🛡️ **FiscalSentry Agent Connected**\n\nI am your autonomous financial defense and paperwork reasoning engine powered by **Gemini 3.1 Flash Lite**. You can ask me questions about medical bill errors, vendor RFP comparisons, clean energy grants, or upload any document/image for instant multimodal auditing.',
+          '🛡️ **FiscalSentry Agent Connected**\n\nI am your autonomous financial defense and paperwork reasoning engine powered by **Gemini 3.7 Flash**. You can ask me questions about medical bill errors, vendor RFP comparisons, clean energy grants, or upload any document/image for instant multimodal auditing.',
         createdAt: new Date().toISOString(),
       },
     ];

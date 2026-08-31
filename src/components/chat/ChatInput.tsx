@@ -164,7 +164,7 @@ export function ChatInput() {
               </button>
 
               <span className="text-[10px] text-slate-400 hidden sm:inline-block ml-1">
-                Gemini 2.0 Multimodal + RAG Memory
+                Gemini 3.7 Flash Multimodal + RAG Memory
               </span>
             </div>
 

@@ -203,10 +203,22 @@ export function ActionDrawer() {
                   {/* Execution Button */}
                   <div className="shrink-0">
                     {isCompleted ? (
-                      <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" />
-                        Done
-                      </span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Done
+                        </span>
+                        {(action.executionResult?.externalUrl || action.executionResult?.link) && (
+                          <a
+                            href={action.executionResult.externalUrl || action.executionResult.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5 font-semibold"
+                          >
+                            Open ↗
+                          </a>
+                        )}
+                      </div>
                     ) : (
                       <button
                         onClick={() => executeAction(action)}
