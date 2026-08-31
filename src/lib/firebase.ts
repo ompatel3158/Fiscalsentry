@@ -49,7 +49,7 @@ googleProvider.addScope('https://www.googleapis.com/auth/calendar.events');
 googleProvider.addScope('https://www.googleapis.com/auth/tasks');
 googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
 googleProvider.addScope('https://www.googleapis.com/auth/chat.messages');
-googleProvider.setCustomParameters({ prompt: 'select_account', access_type: 'offline' });
+googleProvider.setCustomParameters({ prompt: 'consent', access_type: 'offline' });
 
 /**
  * User Profile in Firestore
