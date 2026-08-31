@@ -52,6 +52,7 @@ export default function Home() {
     executeAllPendingActions,
     setPdfAuditTarget,
     setIsPDFModalOpen,
+    isInitialLoading,
   } = useApp();
 
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -122,17 +123,27 @@ export default function Home() {
                   )}
                 </div>
                 <div className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 mt-0.5 font-mono">
-                  {formatCurrency(totalRecovery, primarySymbol)}
+                  {isInitialLoading ? (
+                    <div className="h-7 w-28 bg-emerald-500/20 rounded-lg animate-pulse my-0.5" />
+                  ) : (
+                    formatCurrency(totalRecovery, primarySymbol)
+                  )}
                 </div>
                 <div className="text-[11px] text-[#86868b] mt-1 flex items-center gap-1">
                   <TrendingDown className="w-3 h-3 text-emerald-500" />
-                  {allAudits.length > 0 ? '31.4% avg. healthcare/vendor recovery rate' : 'No active disputes logged'}
+                  {isInitialLoading ? (
+                    <span className="animate-pulse">Loading statements...</span>
+                  ) : allAudits.length > 0 ? (
+                    '31.4% avg. healthcare/vendor recovery rate'
+                  ) : (
+                    'No active disputes logged'
+                  )}
                 </div>
               </div>
 
               {/* Feed Header */}
               <div className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#86868b] flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.04]">
-                <span>Audited Statements ({allAudits.length})</span>
+                <span>Audited Statements ({isInitialLoading ? '···' : allAudits.length})</span>
                 <button
                   onClick={() => {
                     setSelectedMonthKey(null);
@@ -151,7 +162,19 @@ export default function Home() {
 
               {/* Document List or Clean State */}
               <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-                {allAudits.length === 0 ? (
+                {isInitialLoading ? (
+                  <div className="space-y-2 p-1 animate-pulse">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="p-3 rounded-2xl bg-black/5 dark:bg-white/5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="h-3.5 w-24 bg-black/10 dark:bg-white/10 rounded" />
+                          <div className="h-3 w-12 bg-emerald-500/20 rounded" />
+                        </div>
+                        <div className="h-2.5 w-36 bg-black/5 dark:bg-white/10 rounded" />
+                      </div>
+                    ))}
+                  </div>
+                ) : allAudits.length === 0 ? (
                   <div className="p-6 text-center space-y-3">
                     <FileSpreadsheet className="w-8 h-8 text-[#86868b] mx-auto opacity-40" />
                     <p className="text-xs font-semibold text-[#1d1d1f] dark:text-white">
@@ -220,12 +243,25 @@ export default function Home() {
                     <div className="p-3 border-b border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02]">
                       <div className="text-[10px] text-[#86868b] uppercase font-semibold">Total Funds Disputed</div>
                       <div className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                        {formatCurrency(totalRecovery, primarySymbol)}
+                        {isInitialLoading ? (
+                          <div className="h-6 w-24 bg-emerald-500/20 rounded animate-pulse my-0.5" />
+                        ) : (
+                          formatCurrency(totalRecovery, primarySymbol)
+                        )}
                       </div>
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-                      {allAudits.length === 0 ? (
+                      {isInitialLoading ? (
+                        <div className="space-y-2 p-1 animate-pulse">
+                          {[1, 2, 3].map((i) => (
+                            <div key={i} className="p-3 rounded-2xl bg-black/5 dark:bg-white/5 space-y-2">
+                              <div className="h-3 w-20 bg-black/10 dark:bg-white/10 rounded" />
+                              <div className="h-2.5 w-32 bg-black/5 dark:bg-white/10 rounded" />
+                            </div>
+                          ))}
+                        </div>
+                      ) : allAudits.length === 0 ? (
                         <div className="p-4 text-center space-y-2">
                           <p className="text-xs text-[#86868b]">No statements loaded yet.</p>
                           <button

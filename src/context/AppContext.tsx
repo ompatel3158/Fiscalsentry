@@ -34,6 +34,8 @@ interface AppContextType {
   allAudits: AuditResult[];
   activeAudit: AuditResult | null;
   setActiveAudit: (audit: AuditResult | null) => void;
+  isInitialLoading: boolean;
+  isLoadingAudits: boolean;
   yearlyHealthReport: YearlyFinancialHealthReport;
   isSandboxDemoActive: boolean;
   loadTemporarySandboxData: () => void;
@@ -59,13 +61,16 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const { user, userProfile, googleAccessToken, connectGoogleWorkspace, refreshGoogleWorkspaceToken } = useAuth();
+  const { user, userProfile, googleAccessToken, connectGoogleWorkspace, refreshGoogleWorkspaceToken, isLoading: isAuthLoading } = useAuth();
   
   // 1. Initial view state
   const [currentView, setCurrentView] = useState<'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings' | 'privacy' | 'terms'>('dashboard');
   
-  // 2. Audits state
+  // 2. Audits state & loading state
   const [allAudits, setAllAudits] = useState<AuditResult[]>([]);
+  const [isLoadingAudits, setIsLoadingAudits] = useState<boolean>(true);
+  const [isSandboxDemoActive, setIsSandboxDemoActive] = useState<boolean>(false);
+  const isInitialLoading = isAuthLoading || (isLoadingAudits && allAudits.length === 0 && !isSandboxDemoActive);
 
   // Hydrate client view state on mount & handle global logout listener
   useEffect(() => {
@@ -103,8 +108,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // 3. Initialize activeAudit as null by default so user is always greeted with the Total Dashboard Overview
   const [activeAudit, setActiveAudit] = useState<AuditResult | null>(null);
-
-  const [isSandboxDemoActive, setIsSandboxDemoActive] = useState<boolean>(false);
 
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [pdfAuditTarget, setPdfAuditTarget] = useState<AuditResult | null>(null);
@@ -181,14 +184,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Load user's private audits from Firestore when signed in, or clear when signed out
   useEffect(() => {
+    if (isAuthLoading) {
+      setIsLoadingAudits(true);
+      return;
+    }
+
     if (!user?.uid && !isSandboxDemoActive) {
       // User is logged out and not in demo sandbox: strictly clear all private audits
       setAllAudits([]);
       setActiveAudit(null);
+      setIsLoadingAudits(false);
       return;
     }
 
     if (user?.uid && !isSandboxDemoActive) {
+      setIsLoadingAudits(true);
       // 1. First hydrate from user-scoped localStorage cache for instant UI rendering
       if (typeof window !== 'undefined') {
         try {
@@ -197,31 +207,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             const parsed = JSON.parse(userCache);
             if (Array.isArray(parsed) && parsed.length > 0) {
               setAllAudits(parsed);
+              setIsLoadingAudits(false);
             }
           }
         } catch (_) {}
       }
 
       // 2. Fetch fresh encrypted records from Firestore
-      getUserAuditsFromFirestore(user.uid).then((storedAudits) => {
-        if (storedAudits && storedAudits.length > 0) {
-          setAllAudits(storedAudits);
-          if (typeof window !== 'undefined') {
-            try {
-              localStorage.setItem(`fs_cached_audits_${user.uid}`, JSON.stringify(storedAudits));
-            } catch (_) {}
-          }
+      getUserAuditsFromFirestore(user.uid)
+        .then((storedAudits) => {
+          if (storedAudits && storedAudits.length > 0) {
+            setAllAudits(storedAudits);
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem(`fs_cached_audits_${user.uid}`, JSON.stringify(storedAudits));
+              } catch (_) {}
+            }
 
-          const totalDisputed = storedAudits.reduce((acc, a) => acc + (a.potentialRecoveryAmount || 0), 0);
-          setSentryConfig((prev) => ({
-            ...prev,
-            totalDocumentsProcessed: storedAudits.length,
-            totalDisputedAmount: totalDisputed,
-          }));
-        }
-      });
+            const totalDisputed = storedAudits.reduce((acc, a) => acc + (a.potentialRecoveryAmount || 0), 0);
+            setSentryConfig((prev) => ({
+              ...prev,
+              totalDocumentsProcessed: storedAudits.length,
+              totalDisputedAmount: totalDisputed,
+            }));
+          }
+          setIsLoadingAudits(false);
+        })
+        .catch(() => {
+          setIsLoadingAudits(false);
+        });
     }
-  }, [user?.uid, isSandboxDemoActive]);
+  }, [user?.uid, isAuthLoading, isSandboxDemoActive]);
 
   // Proactive Autonomous Poller & Auto-Ingestion Daemon
   // Automatically runs on login/mount, on tab focus, and every 3 minutes in the background
@@ -793,6 +809,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         allAudits,
         activeAudit,
         setActiveAudit,
+        isInitialLoading,
+        isLoadingAudits,
         yearlyHealthReport,
         isSandboxDemoActive,
         loadTemporarySandboxData,

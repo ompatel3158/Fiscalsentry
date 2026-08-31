@@ -6,7 +6,33 @@ import { DollarSign, ShieldAlert, CalendarClock, ListTodo, TrendingUp, CheckCirc
 import { motion } from 'framer-motion';
 
 export function KPICards() {
-  const { allAudits, activeAudit, sentryConfig } = useApp();
+  const { allAudits, activeAudit, sentryConfig, isInitialLoading } = useApp();
+
+  if (isInitialLoading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="p-5 rounded-3xl bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 shadow-subtle flex flex-col justify-between animate-pulse"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="h-3 w-28 bg-black/5 dark:bg-white/10 rounded-md" />
+              <div className="w-8 h-8 rounded-2xl bg-black/5 dark:bg-white/10" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-7 w-32 bg-black/10 dark:bg-white/15 rounded-xl" />
+              <div className="flex items-center justify-between pt-1">
+                <div className="h-2.5 w-24 bg-black/5 dark:bg-white/10 rounded" />
+                <div className="h-4 w-16 bg-black/5 dark:bg-white/10 rounded-full" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   const safeAudits = allAudits || [];
   const totalAudited = safeAudits.reduce((acc, a) => acc + (a?.totalBilledAmount || 0), 0);
   const totalRecovery = safeAudits.reduce((acc, a) => acc + (a?.potentialRecoveryAmount || 0), 0);

@@ -54,7 +54,7 @@ export function AggregateOverview({
   onLoadDemo,
 }: AggregateOverviewProps) {
   const { googleAccessToken, isGoogleTokenExpired, connectGoogleWorkspace } = useAuth();
-  const { setCurrentView, yearlyHealthReport } = useApp();
+  const { setCurrentView, yearlyHealthReport, isInitialLoading } = useApp();
   const { sendMessage } = useChat();
   const [selectedCurrencyFilter, setSelectedCurrencyFilter] = useState<string>('all');
   const [activeOverviewTab, setActiveOverviewTab] = useState<'inbox' | 'yearly_math'>('inbox');
@@ -417,6 +417,68 @@ export function AggregateOverview({
 
     return list;
   }, [filteredAudits, primarySymbol, selectedCurrencyFilter]);
+
+  if (isInitialLoading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        {/* Header Banner Skeleton */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#09090b] rounded-3xl p-4 sm:p-6 border border-black/[0.06] dark:border-white/[0.08] shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-black/5 dark:bg-white/10" />
+            <div className="space-y-2">
+              <div className="h-4 w-48 sm:w-64 bg-black/10 dark:bg-white/15 rounded-md" />
+              <div className="h-3 w-36 bg-black/5 dark:bg-white/10 rounded" />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-28 bg-black/5 dark:bg-white/10 rounded-2xl" />
+            <div className="h-9 w-24 bg-emerald-500/20 rounded-2xl" />
+          </div>
+        </div>
+
+        {/* 4-Card KPI Grid Skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="p-5 rounded-3xl bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 shadow-subtle flex flex-col justify-between"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="h-3 w-28 bg-black/5 dark:bg-white/10 rounded-md" />
+                <div className="w-8 h-8 rounded-2xl bg-black/5 dark:bg-white/10" />
+              </div>
+              <div className="space-y-2">
+                <div className="h-7 w-32 bg-black/10 dark:bg-white/15 rounded-xl" />
+                <div className="flex items-center justify-between pt-1">
+                  <div className="h-2.5 w-24 bg-black/5 dark:bg-white/10 rounded" />
+                  <div className="h-4 w-16 bg-black/5 dark:bg-white/10 rounded-full" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Breakdown Card Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 p-6 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="h-4 w-40 bg-black/10 dark:bg-white/15 rounded-md" />
+              <div className="h-6 w-20 bg-black/5 dark:bg-white/10 rounded-full" />
+            </div>
+            <div className="h-48 w-full bg-black/5 dark:bg-white/5 rounded-2xl" />
+          </div>
+          <div className="p-6 rounded-3xl bg-white dark:bg-[#09090b] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-4">
+            <div className="h-4 w-32 bg-black/10 dark:bg-white/15 rounded-md" />
+            <div className="space-y-3">
+              {[1, 2, 3].map((k) => (
+                <div key={k} className="h-12 w-full bg-black/5 dark:bg-white/5 rounded-xl" />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (audits.length === 0) {
     return (
