@@ -22,7 +22,7 @@ export function ExecutionDAG() {
   const { activeAudit } = useApp();
 
   const executedActionsCount = (activeAudit?.actions || []).filter((a) => a.status === 'completed').length;
-  const totalActionsCount = activeAudit?.actions.length || 0;
+  const totalActionsCount = (activeAudit?.actions || []).length;
 
   return (
     <div className="p-5 rounded-3xl bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 shadow-subtle">

@@ -56,16 +56,19 @@ export default function Home() {
 
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(null);
-  const totalRecovery = allAudits.reduce((acc, a) => acc + (a.potentialRecoveryAmount || 0), 0);
+  const safeAudits = allAudits || [];
+  const totalRecovery = safeAudits.reduce((acc, a) => acc + (a?.potentialRecoveryAmount || 0), 0);
 
   const primarySymbol = useMemo(() => {
-    if (allAudits.length === 0) return '$';
+    if (safeAudits.length === 0) return '$';
     const counts: Record<string, number> = {};
-    allAudits.forEach((a) => {
+    safeAudits.forEach((a) => {
+      if (!a) return;
       const sym = a.currencySymbol || '$';
       counts[sym] = (counts[sym] || 0) + 1;
     });
-    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0] || '$';
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    return (sorted.length > 0 && sorted[0][0]) || '$';
   }, [allAudits]);
 
   return (

@@ -15,6 +15,28 @@ export default function Error({
     console.error('[FiscalSentry Sentry Boundary Error]:', error);
   }, [error]);
 
+  const handleRecover = () => {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('fs_cached_audits');
+        localStorage.removeItem('fs_chat_sessions');
+        localStorage.removeItem('fs_chat_messages_map');
+      }
+    } catch (_) {}
+    reset();
+    if (typeof window !== 'undefined') {
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 100);
+    }
+  };
+
+  const handleReturnHome = () => {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#09090b] text-[#f5f5f7] flex items-center justify-center p-6 relative overflow-hidden font-sans">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(239,68,68,0.1),transparent_70%)] pointer-events-none" />
@@ -39,19 +61,19 @@ export default function Error({
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
           <button
-            onClick={() => reset()}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.97]"
+            onClick={handleRecover}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.97] cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Recover Workspace
           </button>
-          <Link
-            href="/"
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.97]"
+          <button
+            onClick={handleReturnHome}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.97] cursor-pointer"
           >
             <Home className="w-3.5 h-3.5" />
             Return Home
-          </Link>
+          </button>
         </div>
 
         <div className="pt-4 border-t border-white/[0.06] text-[11px] text-[#86868b] font-mono flex items-center justify-between">
