@@ -11,6 +11,7 @@ import {
   getUserChatSessionsFromFirestore,
   deleteChatSessionFromFirestore,
 } from '@/lib/firebase';
+import { VoidyRateLimit, getVoidyRateLimitState, consumeVoidyRequest } from '@/lib/rateLimiter';
 import { toast } from 'sonner';
 
 interface ChatContextType {
@@ -20,6 +21,8 @@ interface ChatContextType {
   messages: ChatMessage[];
   activeMessages: ChatMessage[];
   isStreaming: boolean;
+  rateLimitState: VoidyRateLimit;
+  refreshRateLimit: () => void;
   createNewSession: () => string;
   switchSession: (sessionId: string) => void;
   renameSession: (sessionId: string, newTitle: string) => void;
@@ -101,6 +104,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
+
+  // Rate Limit State
+  const [rateLimitState, setRateLimitState] = useState<VoidyRateLimit>(() => getVoidyRateLimitState());
+
+  const refreshRateLimit = () => {
+    setRateLimitState(getVoidyRateLimitState());
+  };
 
   // Sync to localStorage whenever sessions, activeSessionId, or messagesMap change
   useEffect(() => {
@@ -225,6 +235,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = async (content: string, attachments?: MediaAttachment[]) => {
     if (!content.trim() && (!attachments || attachments.length === 0)) return;
 
+    // Check Voidy AI rate limits
+    const rateCheck = consumeVoidyRequest();
+    setRateLimitState(rateCheck.state);
+
     const userMessageId = 'msg-u-' + Date.now();
     const userMessage: ChatMessage = {
       id: userMessageId,
@@ -242,10 +256,25 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       [activeSessionId]: currentHistory,
     }));
 
+    if (!rateCheck.allowed) {
+      toast.error(rateCheck.message || 'Voidy AI hourly query limit reached.');
+      const rateLimitNotice: ChatMessage = {
+        id: 'msg-rl-' + Date.now(),
+        role: 'assistant',
+        content: `⚠️ **Voidy AI Quota Cooldown Active**\n\nYou have used all **${rateCheck.state.maxRequests}/${rateCheck.state.maxRequests}** queries for this hourly window. Your rate limit will automatically reset.\n\n*Tip: You can still review existing audited statements and run local document calculations.*`,
+        createdAt: new Date().toISOString(),
+      };
+      setMessagesMap((prev) => ({
+        ...prev,
+        [activeSessionId]: [...currentHistory, rateLimitNotice],
+      }));
+      return;
+    }
+
     setIsStreaming(true);
 
     try {
-      const preferredModel = userProfile?.preferredModel || 'gemini-3.1-flash-lite';
+      const preferredModel = userProfile?.preferredModel || 'gemini-3.7-flash';
       let responseText = '';
       let ragSources = undefined;
       let generatedAudit = undefined;
@@ -380,6 +409,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         messages: currentActiveMessages,
         activeMessages: currentActiveMessages,
         isStreaming,
+        rateLimitState,
+        refreshRateLimit,
         createNewSession,
         switchSession,
         renameSession,

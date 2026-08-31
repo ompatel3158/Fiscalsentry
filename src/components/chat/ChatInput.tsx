@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react';
 import { useChat } from '@/context/ChatContext';
 import { MediaAttachment } from '@/lib/types';
 import { MediaAttachmentPreview } from './MediaAttachmentPreview';
+import { UsageProgressRing } from './UsageProgressRing';
 import {
   Send,
   Paperclip,
@@ -17,7 +18,7 @@ import {
 import { toast } from 'sonner';
 
 export function ChatInput() {
-  const { sendMessage, isStreaming } = useChat();
+  const { sendMessage, isStreaming, rateLimitState, refreshRateLimit } = useChat();
   const [content, setContent] = useState('');
   const [attachments, setAttachments] = useState<MediaAttachment[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -168,29 +169,41 @@ export function ChatInput() {
               </span>
             </div>
 
-            {/* Send Button */}
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={(!content.trim() && attachments.length === 0) || isStreaming}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all duration-150 active:scale-[0.97] ${
-                (!content.trim() && attachments.length === 0) || isStreaming
-                  ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-500/20'
-              }`}
-            >
-              {isStreaming ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Reasoning...
-                </>
-              ) : (
-                <>
-                  Send
-                  <Send className="w-3.5 h-3.5" />
-                </>
+            <div className="flex items-center gap-2">
+              {/* Circular Usage Progress Ring */}
+              {rateLimitState && (
+                <UsageProgressRing
+                  charCount={content.length}
+                  maxChars={4000}
+                  rateLimit={rateLimitState}
+                  onRefreshState={refreshRateLimit}
+                />
               )}
-            </button>
+
+              {/* Send Button */}
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={(!content.trim() && attachments.length === 0) || isStreaming || rateLimitState?.isRateLimited}
+                className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all duration-150 active:scale-[0.97] ${
+                  (!content.trim() && attachments.length === 0) || isStreaming || rateLimitState?.isRateLimited
+                    ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-500/20'
+                }`}
+              >
+                {isStreaming ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Reasoning...
+                  </>
+                ) : (
+                  <>
+                    Send
+                    <Send className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
