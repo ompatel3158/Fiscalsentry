@@ -167,4 +167,5 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ---
 
 ## 📄 License
-MIT License • Built with pride for the **Google All Things Agentic Hackathon 2026**.
+
+This project is licensed under the **Non-Commercial Testing & Evaluation License** — see the [LICENSE](file:///b:/work/Taskmaster/LICENSE) file for details. Permitted for personal testing, academic research, and hackathon evaluation; commercial resale and monetization are strictly prohibited. Built with pride for the **Google All Things Agentic Hackathon 2026**.
