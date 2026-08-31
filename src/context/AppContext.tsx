@@ -67,23 +67,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // 2. Audits state
   const [allAudits, setAllAudits] = useState<AuditResult[]>([]);
 
-  // Hydrate client state from localStorage safely on mount
+  // Hydrate client view state on mount & handle global logout listener
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const seen = localStorage.getItem('fs_has_seen_welcome');
       if (!seen) {
         setCurrentView('welcome');
       }
-      try {
-        const cached = localStorage.getItem('fs_cached_audits');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setAllAudits(parsed);
-          }
-        }
-      } catch (_) {}
     }
+
+    const handleLogout = () => {
+      setAllAudits([]);
+      setActiveAudit(null);
+      setSentryLogs([]);
+      setIsSandboxDemoActive(false);
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('fs:auth:logout', handleLogout);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('fs:auth:logout', handleLogout);
+      }
+    };
   }, []);
 
   // 3. Initialize activeAudit as null by default so user is always greeted with the Total Dashboard Overview
@@ -153,33 +160,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
-  // Sync allAudits to localStorage whenever they change
+  // Sync user-specific audits to localStorage whenever they change
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        if (allAudits.length > 0) {
-          localStorage.setItem('fs_cached_audits', JSON.stringify(allAudits));
+        if (user?.uid && allAudits.length > 0 && !isSandboxDemoActive) {
+          localStorage.setItem(`fs_cached_audits_${user.uid}`, JSON.stringify(allAudits));
         }
       } catch (_) {}
     }
-  }, [allAudits]);
+  }, [allAudits, user?.uid, isSandboxDemoActive]);
 
-  // Load user's private audits from Firestore when signed in
+  // Load user's private audits from Firestore when signed in, or clear when signed out
   useEffect(() => {
+    if (!user?.uid && !isSandboxDemoActive) {
+      // User is logged out and not in demo sandbox: strictly clear all private audits
+      setAllAudits([]);
+      setActiveAudit(null);
+      return;
+    }
+
     if (user?.uid && !isSandboxDemoActive) {
+      // 1. First hydrate from user-scoped localStorage cache for instant UI rendering
+      if (typeof window !== 'undefined') {
+        try {
+          const userCache = localStorage.getItem(`fs_cached_audits_${user.uid}`);
+          if (userCache) {
+            const parsed = JSON.parse(userCache);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setAllAudits(parsed);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. Fetch fresh encrypted records from Firestore
       getUserAuditsFromFirestore(user.uid).then((storedAudits) => {
         if (storedAudits && storedAudits.length > 0) {
-          setAllAudits((prev) => {
-            const combined = [...storedAudits];
-            prev.forEach((p) => {
-              if (!combined.some((c) => c.id === p.id)) {
-                combined.push(p);
-              }
-            });
-            return combined;
-          });
-
-          // Keep activeAudit null by default so user sees the Total Dashboard Overview
+          setAllAudits(storedAudits);
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(`fs_cached_audits_${user.uid}`, JSON.stringify(storedAudits));
+            } catch (_) {}
+          }
 
           const totalDisputed = storedAudits.reduce((acc, a) => acc + (a.potentialRecoveryAmount || 0), 0);
           setSentryConfig((prev) => ({

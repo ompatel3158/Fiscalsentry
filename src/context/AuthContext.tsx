@@ -413,15 +413,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Sign Out
   const signOut = async () => {
+    const currentUid = user?.uid;
     await fbSignOut(auth);
     setUser(null);
     setUserProfile(null);
     setGoogleAccessToken(null);
+    setGoogleTokenSavedAt(null);
+    
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('fs_google_token');
-      sessionStorage.removeItem('fs_google_token');
+      try {
+        localStorage.removeItem('fs_google_token');
+        localStorage.removeItem('fs_google_token_saved_at');
+        sessionStorage.removeItem('fs_google_token');
+        localStorage.removeItem('fs_cached_audits');
+        localStorage.removeItem('fs_chat_sessions');
+        localStorage.removeItem('fs_chat_messages_map');
+        localStorage.removeItem('fs_active_session_id');
+        localStorage.removeItem('fs_has_initial_synced');
+        localStorage.removeItem('fs_last_poll_timestamp');
+        localStorage.removeItem('fs_voidy_rate_limit_v5h');
+
+        if (currentUid) {
+          localStorage.removeItem(`fs_cached_audits_${currentUid}`);
+          localStorage.removeItem(`fs_chat_sessions_${currentUid}`);
+          localStorage.removeItem(`fs_chat_messages_map_${currentUid}`);
+        }
+
+        // Dispatch logout event across the app
+        window.dispatchEvent(new Event('fs:auth:logout'));
+      } catch (_) {}
     }
-    toast.info('Signed out of FiscalSentry');
+    toast.info('Signed out of FiscalSentry', {
+      description: 'Your private financial ledger and session data have been cleared from this device.',
+    });
   };
 
   // Update Profile Settings in Firestore & LocalStorage

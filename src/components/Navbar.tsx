@@ -23,6 +23,7 @@ import {
   Sun,
   Moon,
   Bot,
+  LogOut,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -36,7 +37,7 @@ export function Navbar({ onToggleMobileSidebar }: { onToggleMobileSidebar?: () =
     clearSandboxData,
     triggerManualSentryScan,
   } = useApp();
-  const { user, openAuthModal } = useAuth();
+  const { user, openAuthModal, signOut } = useAuth();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   const navigateTo = (view: 'welcome' | 'dashboard' | 'chat' | 'analytics' | 'settings', resetActiveAudit = true) => {
@@ -233,23 +234,33 @@ export function Navbar({ onToggleMobileSidebar }: { onToggleMobileSidebar?: () =
             </select>
           </div>
 
-          {/* User Account Button (Desktop) */}
-          <div className="hidden sm:flex items-center">
+          {/* User Account Button & Quick Sign Out (Desktop) */}
+          <div className="hidden sm:flex items-center gap-1.5">
             {user ? (
-              <button
-                onClick={() => navigateTo('settings', false)}
-                className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-xs font-semibold text-[#1d1d1f] dark:text-white transition-all"
-                title="Open Account Settings"
-              >
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt="Profile" className="w-4 h-4 rounded-full" />
-                ) : (
-                  <UserIcon className="w-3.5 h-3.5 text-emerald-500" />
-                )}
-                <span className="max-w-[100px] truncate">
-                  {user.displayName || user.email?.split('@')[0]}
-                </span>
-              </button>
+              <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 p-0.5 rounded-xl border border-black/[0.04] dark:border-white/[0.06]">
+                <button
+                  onClick={() => navigateTo('settings', false)}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-xs font-semibold text-[#1d1d1f] dark:text-white transition-all"
+                  title="Open Account Settings"
+                >
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt="Profile" className="w-4 h-4 rounded-full" />
+                  ) : (
+                    <UserIcon className="w-3.5 h-3.5 text-emerald-500" />
+                  )}
+                  <span className="max-w-[100px] truncate">
+                    {user.displayName || user.email?.split('@')[0]}
+                  </span>
+                </button>
+                <button
+                  onClick={() => signOut()}
+                  className="p-1.5 rounded-lg hover:bg-rose-500/10 text-[#86868b] hover:text-rose-500 transition-colors"
+                  title="Sign Out"
+                  aria-label="Sign Out"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ) : (
               <button
                 onClick={() => openAuthModal('login')}
@@ -468,12 +479,18 @@ export function Navbar({ onToggleMobileSidebar }: { onToggleMobileSidebar?: () =
                       </div>
                     )}
                     <div className="text-xs">
-                      <div className="font-bold truncate max-w-[140px]">
+                      <div className="font-bold truncate max-w-[130px]">
                         {user.displayName || 'User'}
                       </div>
-                      <div className="text-[10px] text-[#86868b] truncate max-w-[140px]">
-                        {user.email}
-                      </div>
+                      <button
+                        onClick={() => {
+                          signOut();
+                          setIsMobileNavOpen(false);
+                        }}
+                        className="text-[10px] text-rose-500 hover:text-rose-600 font-bold underline cursor-pointer"
+                      >
+                        Sign Out
+                      </button>
                     </div>
                   </div>
                 ) : (

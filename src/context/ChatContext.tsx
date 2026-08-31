@@ -112,29 +112,83 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setRateLimitState(getVoidyRateLimitState());
   };
 
-  // Sync to localStorage whenever sessions, activeSessionId, or messagesMap change
+  // Reset state on global logout event
   useEffect(() => {
+    const handleLogout = () => {
+      const defaultSessions: ChatSession[] = [
+        {
+          id: DEFAULT_SESSION_ID,
+          title: 'New Consultation',
+          previewText: 'Ready to audit bills, quotes, and compliance paperwork...',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isPinned: false,
+        },
+      ];
+      const defaultMap: Record<string, ChatMessage[]> = {
+        [DEFAULT_SESSION_ID]: [
+          {
+            id: 'msg-init-1',
+            role: 'assistant',
+            content:
+              '🛡️ **FiscalSentry Agent Connected**\n\nI am your autonomous financial defense and paperwork reasoning engine powered by **Gemini 3.7 Flash**. You can ask me questions about medical bill errors, vendor RFP comparisons, clean energy grants, or upload any document/image for instant multimodal auditing.',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      };
+      setSessions(defaultSessions);
+      setActiveSessionId(DEFAULT_SESSION_ID);
+      setMessagesMap(defaultMap);
+      setIsStreaming(false);
+    };
+
     if (typeof window !== 'undefined') {
+      window.addEventListener('fs:auth:logout', handleLogout);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('fs:auth:logout', handleLogout);
+      }
+    };
+  }, []);
+
+  // Sync to localStorage whenever sessions, activeSessionId, or messagesMap change (scoped by user.uid)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && user?.uid) {
       try {
-        localStorage.setItem('fs_chat_sessions', JSON.stringify(sessions));
-        localStorage.setItem('fs_active_session_id', activeSessionId);
-        localStorage.setItem('fs_chat_messages_map', JSON.stringify(messagesMap));
+        localStorage.setItem(`fs_chat_sessions_${user.uid}`, JSON.stringify(sessions));
+        localStorage.setItem(`fs_chat_messages_map_${user.uid}`, JSON.stringify(messagesMap));
       } catch (err) {
         console.warn('[ChatContext] Failed to cache to localStorage', err);
       }
     }
-  }, [sessions, activeSessionId, messagesMap]);
+  }, [sessions, messagesMap, user?.uid]);
 
-  // Load chat history from Firestore when authenticated
+  // Load chat history when user signs in
   useEffect(() => {
     if (user?.uid) {
+      // 1. First check user-scoped local cache
+      if (typeof window !== 'undefined') {
+        try {
+          const cachedSessions = localStorage.getItem(`fs_chat_sessions_${user.uid}`);
+          const cachedMap = localStorage.getItem(`fs_chat_messages_map_${user.uid}`);
+          if (cachedSessions && cachedMap) {
+            const parsedS = JSON.parse(cachedSessions);
+            const parsedM = JSON.parse(cachedMap);
+            if (Array.isArray(parsedS) && parsedS.length > 0) {
+              setSessions(parsedS);
+              setMessagesMap(parsedM);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. Fetch latest from Firestore
       getUserChatSessionsFromFirestore(user.uid).then(({ sessions: firestoreSessions, messagesMap: firestoreMap }) => {
         if (firestoreSessions && firestoreSessions.length > 0) {
           setSessions(firestoreSessions);
           setMessagesMap(firestoreMap);
-          if (firestoreSessions.some((s) => s.id === activeSessionId)) {
-            // Keep current active session
-          } else {
+          if (!firestoreSessions.some((s) => s.id === activeSessionId)) {
             setActiveSessionId(firestoreSessions[0].id);
           }
         }
