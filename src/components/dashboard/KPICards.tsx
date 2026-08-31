@@ -7,17 +7,17 @@ import { motion } from 'framer-motion';
 
 export function KPICards() {
   const { allAudits, activeAudit, sentryConfig } = useApp();
-
-  const totalAudited = allAudits.reduce((acc, a) => acc + a.totalBilledAmount, 0);
-  const totalRecovery = allAudits.reduce((acc, a) => acc + a.potentialRecoveryAmount, 0);
-  const activeDeadlinesCount = allAudits.flatMap((a) => a.actions).filter((act) => act.deadlineDate).length;
-  const pendingActionsCount = (activeAudit?.actions || []).filter((a) => a.status === 'pending').length;
+  const safeAudits = allAudits || [];
+  const totalAudited = safeAudits.reduce((acc, a) => acc + (a?.totalBilledAmount || 0), 0);
+  const totalRecovery = safeAudits.reduce((acc, a) => acc + (a?.potentialRecoveryAmount || 0), 0);
+  const activeDeadlinesCount = safeAudits.flatMap((a) => a?.actions || []).filter((act) => act?.deadlineDate).length;
+  const pendingActionsCount = (activeAudit?.actions || []).filter((a) => a?.status === 'pending').length;
 
   const cards = [
     {
       title: 'Total Paperwork Audited',
       value: `$${totalAudited.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      subtitle: `${allAudits.length} Statements & RFP Proposals Processed`,
+      subtitle: `${safeAudits.length} Statements & RFP Proposals Processed`,
       icon: DollarSign,
       color: 'from-blue-500/10 to-indigo-500/10 text-blue-600 dark:text-blue-400 border-blue-200/60 dark:border-blue-900/40',
       badge: 'Multimodal OCR',

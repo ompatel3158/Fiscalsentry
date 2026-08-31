@@ -136,9 +136,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const daysLeft = Math.max(1, Math.ceil((15 * 86400000 - msPassed) / 86400000));
           setSessionDaysRemaining(daysLeft);
 
-          // Update linked providers if changed
-          const activeProviders = currentUser.providerData.map((p) => p.providerId);
-          if (activeProviders.length !== profile.providers.length) {
+          // Update linked providers if changed safely
+          const activeProviders = currentUser.providerData?.map((p) => p.providerId) || [];
+          const profileProviders = Array.isArray(profile?.providers) ? profile.providers : [];
+          if (activeProviders.length !== profileProviders.length) {
             profile.providers = activeProviders;
             await syncUserProfile(currentUser);
           }

@@ -84,7 +84,8 @@ export function AggregateOverview({
       }
     > = {};
 
-    audits.forEach((a) => {
+    (audits || []).forEach((a) => {
+      if (!a) return;
       const { code, symbol } = normalizeCurrency(a.currency, a.currencySymbol);
 
       if (!map[code]) {
@@ -118,8 +119,10 @@ export function AggregateOverview({
 
   // Filter audits based on canonical currency code
   const filteredAudits = useMemo(() => {
-    if (selectedCurrencyFilter === 'all') return audits;
-    return audits.filter((a) => {
+    const list = audits || [];
+    if (selectedCurrencyFilter === 'all') return list;
+    return list.filter((a) => {
+      if (!a) return false;
       const { code } = normalizeCurrency(a.currency, a.currencySymbol);
       return code === selectedCurrencyFilter;
     });
@@ -131,13 +134,16 @@ export function AggregateOverview({
       const target = currencyBreakdowns.find((c) => c.currency === selectedCurrencyFilter);
       if (target) return target.symbol;
     }
-    if (audits.length === 0) return '$';
+    const safeAudits = audits || [];
+    if (safeAudits.length === 0) return '$';
     const counts: Record<string, number> = {};
-    audits.forEach((a) => {
+    safeAudits.forEach((a) => {
+      if (!a) return;
       const { symbol } = normalizeCurrency(a.currency, a.currencySymbol);
       counts[symbol] = (counts[symbol] || 0) + 1;
     });
-    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0] || '$';
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    return (sorted.length > 0 && sorted[0][0]) || '$';
   }, [audits, selectedCurrencyFilter, currencyBreakdowns]);
 
   // Extract upcoming obligations (bills, subscriptions, EMIs with due dates)

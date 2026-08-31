@@ -38,7 +38,8 @@ export function FinancialYearView() {
   // Available currencies
   const currencyBreakdowns = useMemo(() => {
     const map: Record<string, { currency: string; symbol: string; count: number }> = {};
-    allAudits.forEach((a) => {
+    (allAudits || []).forEach((a) => {
+      if (!a) return;
       const code = a.currency || 'USD';
       const sym = a.currencySymbol || (code === 'INR' ? '₹' : code === 'EUR' ? '€' : code === 'GBP' ? '£' : '$');
       if (!map[code]) {

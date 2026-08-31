@@ -198,7 +198,7 @@ export function AuditInspector() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
-                {activeAudit.lineItems.map((item) => {
+                {(activeAudit.lineItems || []).map((item) => {
                   const isExpanded = expandedItemId === item.id;
                   return (
                     <React.Fragment key={item.id}>

@@ -64,13 +64,14 @@ export function GroupedAuditList({
 
   // Filter audits by search query
   const filteredAudits = useMemo(() => {
-    if (!searchQuery.trim()) return audits;
+    const list = audits || [];
+    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
-    return audits.filter(
+    return list.filter(
       (a) =>
-        a.title.toLowerCase().includes(q) ||
-        a.providerOrVendor.toLowerCase().includes(q) ||
-        (a.category && a.category.toLowerCase().includes(q))
+        (a?.title && a.title.toLowerCase().includes(q)) ||
+        (a?.providerOrVendor && a.providerOrVendor.toLowerCase().includes(q)) ||
+        (a?.category && a.category.toLowerCase().includes(q))
     );
   }, [audits, searchQuery]);
 
