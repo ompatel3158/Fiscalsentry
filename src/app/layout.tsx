@@ -10,6 +10,9 @@ export const metadata: Metadata = {
   title: 'FiscalSentry | Autonomous Financial & Paperwork Action Engine',
   description:
     'Autonomous 24/7 background agent built for Google All Things Agentic (Taskmaster) Hackathon. Ingests, audits, and executes real-world actions for messy financial paperwork across Google Workspace and Slack.',
+  verification: {
+    google: 'B0aX889rrTPfs_HTGZqsfdp_J2vrQeBuOOoGm3Ukwls',
+  },
   icons: {
     icon: [
       { url: '/icon.svg', type: 'image/svg+xml' },
@@ -28,6 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <meta name="google-site-verification" content="B0aX889rrTPfs_HTGZqsfdp_J2vrQeBuOOoGm3Ukwls" />
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/icon.svg" />
       </head>
