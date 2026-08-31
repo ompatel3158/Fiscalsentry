@@ -39,7 +39,41 @@ async function refreshGoogleAccessToken(refreshToken: string): Promise<string | 
 }
 
 /**
- * Fetch delta emails from Gmail API for a user
+ * Helper to strip HTML and extract readable text while preserving invoice links and table data
+ */
+function cleanHtml(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<a\s+(?:[^>]*?\s+)?href=(["'])(https?:\/\/[^"']+)\1[^>]*>([\s\S]*?)<\/a>/gi, (_, __, url, linkText) => {
+      const clean = linkText.replace(/<[^>]+>/g, '').trim();
+      if (/invoice|receipt|statement|bill|pay|download|view|details|order/i.test(`${url} ${clean}`)) {
+        return ` [Web Invoice Link: ${url} (${clean || 'View'})] `;
+      }
+      return ` ${clean} `;
+    })
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/tr>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<br\s*[\/]?>/gi, '\n')
+    .replace(/<td[^>]*>/gi, ' | ')
+    .replace(/<th[^>]*>/gi, ' | ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x20B9;/gi, '₹')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n\s*\n/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Fetch delta emails from Gmail API for a user with rich recursive HTML & attachment parsing
  */
 async function fetchUserDeltaEmails(accessToken: string, lastPollTimestamp: number = 0, existingIds: string[] = []): Promise<any[]> {
   const epochSeconds = lastPollTimestamp > 0
@@ -73,6 +107,46 @@ async function fetchUserDeltaEmails(accessToken: string, lastPollTimestamp: numb
         const headers = data.payload?.headers || [];
         const getH = (n: string) => headers.find((h: any) => h.name.toLowerCase() === n.toLowerCase())?.value || '';
 
+        let textAcc = '';
+        let htmlAcc = '';
+
+        const extractParts = (part: any) => {
+          if (!part) return;
+          if (part.mimeType === 'text/plain' && part.body?.data) {
+            try {
+              textAcc += '\n' + Buffer.from(part.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+            } catch (_) {}
+          }
+          if (part.mimeType === 'text/html' && part.body?.data) {
+            try {
+              const rawHtml = Buffer.from(part.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+              htmlAcc += '\n' + cleanHtml(rawHtml);
+            } catch (_) {}
+          }
+          if (part.parts && Array.isArray(part.parts)) {
+            part.parts.forEach(extractParts);
+          }
+        };
+
+        if (data.payload?.body?.data) {
+          try {
+            const raw = Buffer.from(data.payload.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+            if (data.payload.mimeType === 'text/html') {
+              htmlAcc += cleanHtml(raw);
+            } else {
+              textAcc += raw;
+            }
+          } catch (_) {}
+        }
+
+        if (data.payload?.parts) {
+          data.payload.parts.forEach(extractParts);
+        }
+
+        const plainText = textAcc.trim();
+        const htmlText = htmlAcc.trim();
+        let bodyText = htmlText && htmlText.length > 50 ? htmlText : (plainText || data.snippet || '');
+
         return {
           id: msg.id,
           threadId: msg.threadId,
@@ -80,7 +154,7 @@ async function fetchUserDeltaEmails(accessToken: string, lastPollTimestamp: numb
           subject: getH('Subject'),
           date: getH('Date'),
           snippet: data.snippet || '',
-          bodyText: data.snippet || '',
+          bodyText,
         };
       } catch {
         return null;

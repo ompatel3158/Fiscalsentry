@@ -34,18 +34,28 @@ export interface ExtractedEmail {
 }
 
 /**
- * Helper to strip HTML tags and scripts to extract clean, well-formatted text from email HTML bodies
+ * Helper to strip HTML tags and scripts to extract clean, well-formatted text from email HTML bodies,
+ * while preserving web invoice links, tabular figures, and currency markers.
  */
-function cleanHtmlText(html: string): string {
+export function cleanHtmlText(html: string): string {
   if (!html) return '';
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<script[\s\S]*?<\/script>/gi, '')
+    // Preserve important web invoice and payment links: <a href="https://...">View Invoice</a> -> [Web Invoice Link: https://... (View Invoice)]
+    .replace(/<a\s+(?:[^>]*?\s+)?href=(["'])(https?:\/\/[^"']+)\1[^>]*>([\s\S]*?)<\/a>/gi, (_, __, url, linkText) => {
+      const cleanLinkText = linkText.replace(/<[^>]+>/g, '').trim();
+      if (/invoice|receipt|statement|bill|pay|download|view|details|order|account|subscription/i.test(`${url} ${cleanLinkText}`)) {
+        return ` [Web Invoice Link: ${url} (${cleanLinkText || 'View'})] `;
+      }
+      return ` ${cleanLinkText} `;
+    })
     .replace(/<\/div>/gi, '\n')
     .replace(/<\/tr>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
     .replace(/<br\s*[\/]?>/gi, '\n')
     .replace(/<td[^>]*>/gi, ' | ')
+    .replace(/<th[^>]*>/gi, ' | ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
@@ -53,6 +63,8 @@ function cleanHtmlText(html: string): string {
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/gi, "'")
+    .replace(/&#x20B9;/gi, '₹')
+    .replace(/&#8377;/gi, '₹')
     .replace(/[ \t]+/g, ' ')
     .replace(/\n\s*\n\s*\n/g, '\n\n')
     .trim();
@@ -72,15 +84,16 @@ export function isPromotionalOrMarketingEmail(
 
   // Strong transactional signals (these are ALWAYS treated as real transactions, even if they have discount/reward words)
   const isDefiniteTransaction =
-    /(?:debited|credited|refunded|payment|paid|transaction alert|upi transaction|upi-ref|imps|neft|rtgs|invoice|receipt|order confirmed|order confirmation|e-statement|account statement|funds blocked|funds unblocked|mandate|card ending in|card ending [0-9]{4}|billing statement|tax invoice|paid to|sent to\b|withdrawn from|deposited to|charged your card|your receipt from|order #|swiggy|zomato|uber|ola|blinkit|zepto|bigbasket|amazon|flipkart|hdfc|icici|sbi|axis|kotak|paytm|phonepe|cred|groww|zerodha|indusind)/i.test(
+    /(?:debited|credited|refunded|payment|paid|transaction alert|upi transaction|upi-ref|imps|neft|rtgs|invoice|receipt|order confirmed|order confirmation|e-statement|account statement|funds blocked|funds unblocked|mandate|card ending in|card ending [0-9]{4}|billing statement|tax invoice|paid to|sent to\b|withdrawn from|deposited to|charged your card|your receipt from|order #|order id|payment receipt|invoice #|bill paid|bill due|subscription renewed|auto-renewal|auto debit|web invoice|stripe|swiggy|zomato|uber|ola|blinkit|zepto|bigbasket|amazon|flipkart|hdfc|icici|sbi|axis|kotak|paytm|phonepe|cred|groww|zerodha|indusind|paypal|github|apple|google play|netflix|spotify|aws|digitalocean|cloudflare|vercel)/i.test(
       combined
     );
 
-  const hasMonetaryAmount = /(?:₹|inr|rs\.?|\$|€|£)\s*[\d,]+(?:\.\d{1,2})?|debited\s*(?:rs|inr|₹|\$)?\s*[\d,]+|credited\s*(?:rs|inr|₹|\$)?\s*[\d,]+|amount of\s*(?:rs|inr|₹|\$)?\s*[\d,]+/i.test(
-    `${subject} ${snippet} ${bodyText.substring(0, 1500)}`
+  const hasMonetaryAmount = /(?:₹|inr|rs\.?|\$|€|£)\s*[\d,]+(?:\.\d{1,2})?|debited\s*(?:rs|inr|₹|\$)?\s*[\d,]+|credited\s*(?:rs|inr|₹|\$)?\s*[\d,]+|amount of\s*(?:rs|inr|₹|\$)?\s*[\d,]+|total\s*:\s*(?:rs|inr|₹|\$)?\s*[\d,]+|subtotal\s*:\s*(?:rs|inr|₹|\$)?\s*[\d,]+/i.test(
+    `${subject} ${snippet} ${bodyText.substring(0, 3000)}`
   );
 
-  if (isDefiniteTransaction && hasMonetaryAmount) {
+  // If definite transaction or has monetary amount, it is NEVER promotional
+  if (isDefiniteTransaction || (hasMonetaryAmount && !/(?:earn \d+% cashback|upto \d+% off|apply coupon)/i.test(subject))) {
     return false;
   }
 
@@ -96,11 +109,11 @@ export function isPromotionalOrMarketingEmail(
 
   // Promotional sender or snippet patterns without any monetary proof
   const isMarketingBody =
-    /(?:use code [a-z0-9]+ to get|apply coupon|unsubscribe from this email|view in browser|promotional email|marketing communication|hurry, offer valid|claim your bonus|exclusive discount|promotional terms apply|this is a promotional message)/i.test(
-      `${snippet} ${bodyText.substring(0, 800)}`
+    /(?:use code [a-z0-9]+ to get|apply coupon|unsubscribe from this email|promotional email|marketing communication|hurry, offer valid|claim your bonus|exclusive discount|promotional terms apply|this is a promotional message)/i.test(
+      `${snippet} ${bodyText.substring(0, 1000)}`
     );
 
-  if (isMarketingBody && !hasMonetaryAmount) {
+  if (isMarketingBody && !hasMonetaryAmount && !isDefiniteTransaction) {
     return true;
   }
 
@@ -417,7 +430,22 @@ export async function fetchFinancialEmailsFromGmail(
           data.payload.parts.forEach(processPart);
         }
 
-        const bodyText = (textAccumulator.trim() || htmlAccumulator.trim() || snippet).trim();
+        const plainText = textAccumulator.trim();
+        const htmlText = htmlAccumulator.trim();
+
+        // Intelligently select richest content so rich HTML invoice tables are never skipped for 1-line dummy plain text
+        let bodyText = '';
+        if (htmlText && htmlText.length > 50) {
+          if (plainText && plainText.length > 80 && !htmlText.includes(plainText.substring(0, 50))) {
+            bodyText = `${htmlText}\n\n[Plain Text Excerpt]:\n${plainText}`;
+          } else {
+            bodyText = htmlText;
+          }
+        } else if (plainText) {
+          bodyText = plainText;
+        } else {
+          bodyText = snippet;
+        }
 
         if (isPromotionalOrMarketingEmail(subject, snippet, sender, bodyText)) {
           return null;
