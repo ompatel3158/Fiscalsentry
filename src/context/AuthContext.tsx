@@ -83,8 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isGoogleTokenExpired = React.useMemo(() => {
     if (!googleAccessToken) return true;
     if (!googleTokenSavedAt) return false;
-    // Strictly rotate before 45 minutes (2700s) to prevent 1-hour Google OAuth expiration
-    return Date.now() - googleTokenSavedAt > 2700 * 1000;
+    // Valid for 55 minutes (3300s) before needing renewal
+    return Date.now() - googleTokenSavedAt > 3300 * 1000;
   }, [googleAccessToken, googleTokenSavedAt]);
 
   const closeAuthModal = () => {
@@ -143,9 +143,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await syncUserProfile(currentUser);
           }
 
-          // Restore Google Access Token from Firestore if available
+          // Restore Google Access Token & Saved Timestamp from Firestore if available
           if (profile.googleAccessToken) {
             setGoogleAccessToken(profile.googleAccessToken);
+            if (profile.googleTokenSavedAt) {
+              setGoogleTokenSavedAt(profile.googleTokenSavedAt);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('fs_google_token_saved_at', profile.googleTokenSavedAt.toString());
+              }
+            }
             if (typeof window !== 'undefined') {
               localStorage.setItem('fs_google_token', profile.googleAccessToken);
               sessionStorage.setItem('fs_google_token', profile.googleAccessToken);

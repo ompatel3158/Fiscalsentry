@@ -215,30 +215,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user?.uid, isSandboxDemoActive]);
 
-  // Initial Auto-Sync: ONLY run once when the user FIRST connects Google Workspace and has 0 cached audits
-  useEffect(() => {
-    const token =
-      googleAccessToken ||
-      userProfile?.googleAccessToken ||
-      (typeof window !== 'undefined' ? localStorage.getItem('fs_google_token') : null);
-
-    const hasInitialSynced = typeof window !== 'undefined' ? localStorage.getItem('fs_has_initial_synced') : null;
-
-    if (token && !hasInitialSynced && allAudits.length === 0 && !isSandboxDemoActive) {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('fs_has_initial_synced', 'true');
-        localStorage.setItem('fs_last_poll_timestamp', Date.now().toString());
-      }
-      console.log('[Sentry] Performing first-time historical inbox scan...');
-      triggerManualSentryScan(token, 'delta');
-    }
-  }, [googleAccessToken, userProfile?.googleAccessToken, isSandboxDemoActive]);
-
-  // Automated Background Poller (Runs periodically on 15m cadence + on tab focus/return)
+  // Proactive Autonomous Poller & Auto-Ingestion Daemon
+  // Automatically runs on login/mount, on tab focus, and every 3 minutes in the background
   useEffect(() => {
     if (isSandboxDemoActive) return;
 
-    const checkAndRunHourlySentry = async () => {
+    const performBackgroundInboxScan = async () => {
       const token =
         googleAccessToken ||
         userProfile?.googleAccessToken ||
@@ -248,34 +230,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       if (!token) return;
 
-      const savedAt = Number(
+      const savedAt = userProfile?.googleTokenSavedAt || Number(
         typeof window !== 'undefined' ? localStorage.getItem('fs_google_token_saved_at') || '0' : '0'
       );
-      const isTokenExpired = savedAt > 0 && Date.now() - savedAt > 3000 * 1000;
+      const isTokenExpired = savedAt > 0 && Date.now() - savedAt > 3300 * 1000; // 55 minutes
 
       const lastPoll = Number(
         typeof window !== 'undefined' ? localStorage.getItem('fs_last_poll_timestamp') || '0' : '0'
       );
       const now = Date.now();
-      const pollInterval = 15 * 60 * 1000; // Auto-poll every 15 minutes while active
+      const minInterval = 2 * 60 * 1000; // 2 minutes minimum cooldown between background polls
 
-      if (now - lastPoll >= pollInterval || lastPoll === 0) {
+      if (now - lastPoll >= minInterval || lastPoll === 0) {
         if (isTokenExpired) {
-          console.warn('[Sentry Poller] Google Workspace token is older than 50 minutes (expired).');
-          setSentryLogs((prev) => [
-            {
-              id: 'log-' + Date.now(),
-              timestamp: new Date().toLocaleTimeString(),
-              source: 'gmail',
-              status: 'error',
-              message: 'Google Workspace token expired. Click Scan Mails or Reconnect in Settings to refresh.',
-            },
-            ...prev.slice(0, 15),
-          ]);
-          return;
+          console.warn('[Sentry Poller] Google token near 55m limit. Attempting silent rotation...');
+          const freshToken = await refreshGoogleWorkspaceToken(true);
+          if (freshToken) {
+            console.log('[Sentry Poller] Token refreshed successfully. Executing background scan...');
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('fs_last_poll_timestamp', now.toString());
+            }
+            await triggerManualSentryScan(freshToken, 'delta', true);
+            return;
+          } else {
+            console.warn('[Sentry Poller] Silent refresh requires user gesture. Setting status log.');
+            setSentryLogs((prev) => [
+              {
+                id: 'log-' + Date.now(),
+                timestamp: new Date().toLocaleTimeString(),
+                source: 'gmail',
+                status: 'error',
+                message: 'Google Workspace authorization expired (1-hour limit). Click "Scan Gmail" to refresh permissions.',
+              },
+              ...prev.slice(0, 15),
+            ]);
+            return;
+          }
         }
 
-        console.log('[Sentry Autonomous Worker] Running background inbox check...');
+        console.log('[Sentry Autonomous Worker] Automatically pulling new financial emails in background...');
         if (typeof window !== 'undefined') {
           localStorage.setItem('fs_last_poll_timestamp', now.toString());
         }
@@ -283,15 +276,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // Run on initial mount with a short delay for hydration
-    const timerId = setTimeout(() => {
-      checkAndRunHourlySentry();
+    // 1. Initial proactive scan on mount/login after short 1.5s delay
+    const initialTimer = setTimeout(() => {
+      performBackgroundInboxScan();
     }, 1500);
 
-    // Run whenever window/tab becomes active or focused (e.g. user returns)
+    // 2. Scan whenever window/tab becomes active or focused (user switching back to tab)
     const handleVisibilityOrFocus = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        checkAndRunHourlySentry();
+        performBackgroundInboxScan();
       }
     };
 
@@ -300,16 +293,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       window.addEventListener('focus', handleVisibilityOrFocus);
     }
 
-    // Periodic heartbeat check every 60 seconds
-    const interval = setInterval(checkAndRunHourlySentry, 60 * 1000);
+    // 3. Automated background heartbeat check every 3 minutes (180,000 ms)
+    const pollerInterval = setInterval(performBackgroundInboxScan, 3 * 60 * 1000);
 
     return () => {
-      clearTimeout(timerId);
+      clearTimeout(initialTimer);
       if (typeof window !== 'undefined') {
         window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
         window.removeEventListener('focus', handleVisibilityOrFocus);
       }
-      clearInterval(interval);
+      clearInterval(pollerInterval);
     };
   }, [isSandboxDemoActive, googleAccessToken, userProfile?.googleAccessToken]);
 
@@ -741,7 +734,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (gmailErr: any) {
           if (gmailErr.message === 'GMAIL_AUTH_EXPIRED' || gmailErr.status === 401) {
-            console.log('[Sentry] Google Workspace Token Expired. Initiating refresh...');
+            console.warn('[Sentry] Google Workspace token expired (1-hour limit).');
+            setSentryLogs((prev) => [
+              {
+                id: 'log-' + Date.now(),
+                timestamp: new Date().toLocaleTimeString(),
+                source: 'gmail',
+                status: 'error',
+                message: 'Google Workspace authorization expired (1-hour limit). Click "Scan Gmail" or Reconnect in Settings.',
+              },
+              ...prev.slice(0, 15),
+            ]);
+
             if (!isSilent) {
               toast.loading('Google Workspace Token Expired. Refreshing authorization...', { id: 'sentry-scan' });
               const freshToken = await connectGoogleWorkspace();

@@ -214,12 +214,9 @@ export async function fetchFinancialEmailsTiered(
   let customQuery = '';
 
   if (tier === 'delta') {
-    if (lastSyncedTimestamp && lastSyncedTimestamp > 0) {
-      const epochSeconds = Math.max(0, Math.floor(lastSyncedTimestamp / 1000) - 300); // 5 min buffer
-      customQuery = `-category:promotions -category:social -is:draft -is:spam after:${epochSeconds}`;
-    } else {
-      customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:3d`;
-    }
+    // In delta mode, query the last 7 days of non-promotional inbox messages.
+    // existingAuditedIds guarantees zero duplicates while catching all new/unread payments automatically.
+    customQuery = `-category:promotions -category:social -is:draft -is:spam newer_than:7d`;
     maxResults = 75;
   } else if (tier === 'month') {
     lookbackDays = 31;
