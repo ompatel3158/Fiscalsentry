@@ -7,6 +7,7 @@ import { X, Download, FileText, CheckCircle2, ShieldCheck, Scale } from 'lucide-
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { ExportDropdown } from '@/components/common/ExportDropdown';
+import { BrandLogo } from '@/components/BrandLogo';
 
 export function PDFPreviewModal() {
   const { isPDFModalOpen, setIsPDFModalOpen, pdfAuditTarget } = useApp();
@@ -85,12 +86,15 @@ export function PDFPreviewModal() {
             <div className="max-w-2xl mx-auto bg-white text-slate-900 p-8 sm:p-10 rounded-2xl shadow-lg border border-slate-200 text-xs font-sans space-y-6">
               {/* Document Banner */}
               <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between">
-                <div>
-                  <div className="text-base font-extrabold tracking-tight text-slate-900">
-                    🛡️ FISCALSENTRY LEGAL & COMPLIANCE DOSSIER
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                    AUTONOMOUS FINANCIAL DEFENSE ENGINE • PUBLIC LAW 116-260
+                <div className="flex items-center gap-3">
+                  <BrandLogo className="h-8" />
+                  <div className="border-l border-slate-300 pl-3">
+                    <div className="text-sm font-extrabold tracking-tight text-slate-900">
+                      LEGAL & COMPLIANCE DOSSIER
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono">
+                      AUTONOMOUS FINANCIAL DEFENSE • PUBLIC LAW 116-260
+                    </div>
                   </div>
                 </div>
                 <div className="text-right text-[10px] text-slate-600">
